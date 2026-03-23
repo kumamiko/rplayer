@@ -429,12 +429,17 @@ impl App {
         
         let song_idx = self.filtered_indices[self.selected_index];
         if let Some(song) = self.songs.get(song_idx) {
-            if audio_player.play(&song.path).is_ok() {
-                self.current_song_index = Some(song_idx);
-                self.is_playing = true;
-                self.duration = song.duration;
-                self.current_pos = Duration::ZERO;
-                self.status_message = format!("Playing: {} - {}", song.artist, song.title);
+            match audio_player.play(&song.path) {
+                Ok(()) => {
+                    self.current_song_index = Some(song_idx);
+                    self.is_playing = true;
+                    self.duration = song.duration;
+                    self.current_pos = Duration::ZERO;
+                    self.status_message = format!("播放中: {} - {}", song.artist, song.title);
+                }
+                Err(e) => {
+                    self.set_status(format!("播放失败: {}", e));
+                }
             }
         }
     }

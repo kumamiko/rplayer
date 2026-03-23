@@ -2,7 +2,12 @@ use anyhow::Result;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use std::fs::File;
 use std::io::BufReader;
+use std::panic::{self, AssertUnwindSafe};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
 use std::time::{Duration, Instant};
+
+static DECODER_PANIC: AtomicBool = AtomicBool::new(false);
 
 pub struct AudioPlayer {
     _stream: Option<OutputStream>,
@@ -29,6 +34,38 @@ impl AudioPlayer {
         })
     }
     
+    fn create_decoder(path: &str) -> Result<Decoder<BufReader<File>>> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        let path_owned = path.to_string();
+        
+        // Use spawn + catch_unwind to isolate potential panics from symphonia decoder
+        DECODER_PANIC.store(false, Ordering::SeqCst);
+        
+        let handle = thread::spawn(move || {
+            // Set a panic hook that just sets our flag
+            let old_hook = panic::take_hook();
+            panic::set_hook(Box::new(|_| {
+                DECODER_PANIC.store(true, Ordering::SeqCst);
+            }));
+            
+            let result = panic::catch_unwind(AssertUnwindSafe(|| {
+                Decoder::new(reader)
+            }));
+            
+            // Restore old hook
+            panic::set_hook(old_hook);
+            
+            result
+        });
+        
+        match handle.join() {
+            Ok(Ok(Ok(decoder))) => Ok(decoder),
+            Ok(Ok(Err(e))) => Err(e.into()),
+            Ok(Err(_)) | Err(_) => anyhow::bail!("无法解码音频文件 '{}' - 格式不兼容或文件损坏", path_owned),
+        }
+    }
+    
     pub fn play(&mut self, path: &str) -> Result<()> {
         // Stop current playback
         self.stop();
@@ -37,8 +74,7 @@ impl AudioPlayer {
         let (stream, stream_handle) = OutputStream::try_default()?;
         let sink = Sink::try_new(&stream_handle)?;
         
-        let file = File::open(path)?;
-        let source = Decoder::new(BufReader::new(file))?;
+        let source = Self::create_decoder(path)?;
         
         // Try to get total duration
         self.total_duration = source.total_duration();
@@ -150,8 +186,7 @@ impl AudioPlayer {
         let (stream, stream_handle) = OutputStream::try_default()?;
         let sink = Sink::try_new(&stream_handle)?;
         
-        let file = File::open(&path)?;
-        let source = Decoder::new(BufReader::new(file))?
+        let source = Self::create_decoder(&path)?
             .skip_duration(new_pos);
         
         sink.append(source);
