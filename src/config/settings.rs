@@ -64,16 +64,4 @@ impl Config {
         std::fs::write(path, content)?;
         Ok(())
     }
-    
-    /// Update music folder and save
-    pub fn set_music_folder(&mut self, folder: String) -> Result<()> {
-        self.music_folder = folder;
-        self.save()
-    }
-    
-    /// Toggle repeat mode and save
-    pub fn toggle_repeat(&mut self) -> Result<()> {
-        self.repeat = !self.repeat;
-        self.save()
-    }
 }

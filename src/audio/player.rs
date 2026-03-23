@@ -114,57 +114,6 @@ impl AudioPlayer {
         self.sink.as_ref().map_or(1.0, |s| s.volume())
     }
     
-    pub fn seek(&mut self, offset: Duration) -> Result<()> {
-        let path = match &self.current_path {
-            Some(p) => p.clone(),
-            None => return Ok(()),
-        };
-        
-        // Calculate new position
-        let current = self.current_position();
-        let new_pos = current.saturating_add(offset);
-        
-        // Clamp to valid range
-        let new_pos = if let Some(total) = self.total_duration {
-            new_pos.min(total)
-        } else {
-            new_pos
-        };
-        
-        // Don't seek to very beginning
-        let new_pos = new_pos.max(Duration::ZERO);
-        
-        // Stop and restart with skip
-        if let Some(sink) = self.sink.take() {
-            sink.stop();
-        }
-        self._stream = None;
-        self._stream_handle = None;
-        
-        // Create new audio stream
-        let (stream, stream_handle) = OutputStream::try_default()?;
-        let sink = Sink::try_new(&stream_handle)?;
-        
-        let file = File::open(&path)?;
-        let source = Decoder::new(BufReader::new(file))?
-            .skip_duration(new_pos);
-        
-        sink.append(source);
-        if self.is_paused {
-            sink.pause();
-        } else {
-            sink.play();
-        }
-        
-        self._stream = Some(stream);
-        self._stream_handle = Some(stream_handle);
-        self.sink = Some(sink);
-        self.start_time = Some(Instant::now() - new_pos);
-        self.paused_at = if self.is_paused { Some(new_pos) } else { None };
-        
-        Ok(())
-    }
-    
     pub fn seek_relative(&mut self, forward: bool, secs: u64) -> Result<()> {
         let path = match &self.current_path {
             Some(p) => p.clone(),

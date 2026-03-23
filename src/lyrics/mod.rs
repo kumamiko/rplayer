@@ -1,5 +1,4 @@
 mod parser;
-mod sync;
 
 pub use parser::*;
 
@@ -63,9 +62,5 @@ impl LyricsManager {
         }
         
         (current, next)
-    }
-    
-    pub fn is_loaded(&self) -> bool {
-        !self.lyrics.is_empty()
     }
 }

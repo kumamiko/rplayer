@@ -32,9 +32,6 @@ pub struct App {
     // Search
     pub search_query: String,
     
-    // Command
-    pub command_buffer: String,
-    
     // Status message
     pub status_message: String,
     pub status_expiry: Option<Instant>,
@@ -64,7 +61,6 @@ impl Default for App {
             current_pos: Duration::ZERO,
             duration: Duration::ZERO,
             search_query: String::new(),
-            command_buffer: String::new(),
             status_message: String::new(),
             status_expiry: None,
         }
@@ -342,7 +338,7 @@ impl App {
         }
     }
     
-    fn adjust_scroll(&mut self) {
+    pub fn adjust_scroll(&mut self) {
         let visible_height = 10; // Will be updated dynamically
         if self.selected_index < self.scroll_offset {
             self.scroll_offset = self.selected_index;

@@ -114,6 +114,7 @@ impl<'a> Widget for PlaylistWidget<'a> {
                 Block::default()
                     .title(title)
                     .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(Style::default().fg(Color::Cyan))
             );
         

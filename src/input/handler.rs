@@ -14,7 +14,6 @@ impl InputHandler {
         match app.mode {
             Mode::Normal => self.handle_normal(app, audio_player, key),
             Mode::Search => self.handle_search(app, key),
-            Mode::Command => self.handle_command(app, audio_player, key),
         }
     }
     
@@ -28,14 +27,14 @@ impl InputHandler {
             KeyCode::Char('j') | KeyCode::Down => app.move_down(),
             KeyCode::Char('k') | KeyCode::Up => app.move_up(),
             KeyCode::Char('h') => {
-                // Seek backward 5 seconds
+                // Seek backward 10 seconds
                 audio_player.seek_relative(false, 10)?;
-                app.set_status("<< -10s");
+                app.set_status("⏪ -10秒");
             }
             KeyCode::Char('l') => {
-                // Seek forward 5 seconds
+                // Seek forward 10 seconds
                 audio_player.seek_relative(true, 10)?;
-                app.set_status(">> +10s");
+                app.set_status("⏩ +10秒");
             }
             KeyCode::Char('g') => {
                 app.selected_index = 0;
@@ -43,15 +42,17 @@ impl InputHandler {
             }
             KeyCode::Char('G') => {
                 app.selected_index = app.filtered_indices.len().saturating_sub(1);
-                app.scroll_offset = app.selected_index.saturating_sub(5); // Show some context above
+                app.scroll_offset = app.selected_index.saturating_sub(5);
             }
             KeyCode::PageDown | KeyCode::Right => {
                 let jump = 10.min(app.filtered_indices.len().saturating_sub(app.selected_index + 1));
                 app.selected_index += jump;
+                app.adjust_scroll();
             }
             KeyCode::PageUp | KeyCode::Left => {
                 let jump = 10.min(app.selected_index);
                 app.selected_index -= jump;
+                app.adjust_scroll();
             }
             
             // Playback
@@ -79,12 +80,6 @@ impl InputHandler {
                 app.search_query.clear();
             }
             
-            // Command mode
-            KeyCode::Char(':') => {
-                app.mode = Mode::Command;
-                app.command_buffer.clear();
-            }
-            
             // Rescan
             KeyCode::Char('r') if key.modifiers == KeyModifiers::NONE => {
                 app.scan_music_folder()?;
@@ -92,7 +87,7 @@ impl InputHandler {
             
             // Help
             KeyCode::Char('?') => {
-                app.set_status("j/k:nav | h/l:seek | Enter:play | Space:pause | /:search | ::cmd | q:quit");
+                app.set_status("j/k:导航 | h/l:快进 | Enter:播放 | Space:暂停 | /:搜索 | q:退出");
             }
             
             _ => {}
@@ -127,66 +122,6 @@ impl InputHandler {
         // Live filter (only if still in search mode)
         if app.mode == Mode::Search && !app.search_query.is_empty() {
             app.apply_filter();
-        }
-        
-        Ok(())
-    }
-    
-    fn handle_command(&self, app: &mut App, audio_player: &mut AudioPlayer, key: KeyEvent) -> Result<()> {
-        match key.code {
-            KeyCode::Esc => {
-                app.mode = Mode::Normal;
-                app.command_buffer.clear();
-            }
-            KeyCode::Enter => {
-                self.execute_command(app, audio_player)?;
-                app.mode = Mode::Normal;
-                app.command_buffer.clear();
-            }
-            KeyCode::Backspace => {
-                app.command_buffer.pop();
-            }
-            KeyCode::Char(c) => {
-                app.command_buffer.push(c);
-            }
-            _ => {}
-        }
-        
-        Ok(())
-    }
-    
-    fn execute_command(&self, app: &mut App, audio_player: &mut AudioPlayer) -> Result<()> {
-        let cmd = app.command_buffer.trim();
-        
-        if cmd.is_empty() {
-            return Ok(());
-        }
-        
-        match cmd {
-            "q" | "quit" | "exit" => app.quit(),
-            "rescan" | "scan" => app.scan_music_folder()?,
-            "repeat" | "loop" => {
-                app.config.repeat = !app.config.repeat;
-                app.set_status(if app.config.repeat { "Repeat: ON" } else { "Repeat: OFF" });
-                app.config.save()?;
-            }
-            cmd if cmd.starts_with("vol ") => {
-                if let Ok(vol) = cmd[4..].parse::<f32>() {
-                    let vol = (vol / 100.0).clamp(0.0, 2.0);
-                    audio_player.set_volume(vol);
-                    app.set_status(format!("Volume: {:.0}%", vol * 100.0));
-                }
-            }
-            cmd if cmd.starts_with("folder ") || cmd.starts_with("dir ") => {
-                let folder = cmd.split_once(' ').map(|(_, f)| f.trim()).unwrap_or("");
-                if !folder.is_empty() {
-                    app.config.set_music_folder(folder.to_string())?;
-                    app.scan_music_folder()?;
-                }
-            }
-            _ => {
-                app.set_status(format!("Unknown command: {}", cmd));
-            }
         }
         
         Ok(())

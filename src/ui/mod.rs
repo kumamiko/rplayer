@@ -5,7 +5,6 @@ mod statusbar;
 mod search;
 mod message;
 
-pub use layout::*;
 pub use playlist::*;
 pub use lyrics::*;
 pub use statusbar::*;

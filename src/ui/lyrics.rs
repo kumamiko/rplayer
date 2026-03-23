@@ -63,6 +63,7 @@ impl<'a> Widget for LyricsWidget<'a> {
                 Block::default()
                     .title(" ♪ ")
                     .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(Style::default().fg(Color::DarkGray))
             )
             .alignment(Alignment::Center);
