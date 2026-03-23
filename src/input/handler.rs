@@ -160,13 +160,9 @@ impl InputHandler {
         Ok(())
     }
     
-    fn handle_help(&self, app: &mut App, key: KeyEvent) -> Result<()> {
-        match key.code {
-            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
-                app.mode = Mode::Normal;
-            }
-            _ => {}
-        }
+    fn handle_help(&self, app: &mut App, _key: KeyEvent) -> Result<()> {
+        // Any key closes help
+        app.mode = Mode::Normal;
         Ok(())
     }
 }
