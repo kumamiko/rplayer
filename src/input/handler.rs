@@ -46,12 +46,12 @@ impl InputHandler {
                 app.selected_index = app.filtered_indices.len().saturating_sub(1);
                 app.scroll_offset = app.selected_index.saturating_sub(5);
             }
-            KeyCode::PageDown | KeyCode::Right => {
+            KeyCode::PageDown | KeyCode::Right | KeyCode::Char('d') => {
                 let jump = 10.min(app.filtered_indices.len().saturating_sub(app.selected_index + 1));
                 app.selected_index += jump;
                 app.adjust_scroll();
             }
-            KeyCode::PageUp | KeyCode::Left => {
+            KeyCode::PageUp | KeyCode::Left | KeyCode::Char('u') => {
                 let jump = 10.min(app.selected_index);
                 app.selected_index -= jump;
                 app.adjust_scroll();
@@ -82,11 +82,19 @@ impl InputHandler {
                 app.search_query.clear();
             }
             
-            // Toggle repeat mode
+            // Clear filter
+            KeyCode::Char('F') => {
+                app.search_query.clear();
+                app.filtered_indices = (0..app.songs.len()).collect();
+                app.selected_index = 0;
+                app.scroll_offset = 0;
+                app.set_status("已清除过滤");
+            }
+            
+            // Toggle play mode
             KeyCode::Char('r') if key.modifiers == KeyModifiers::NONE => {
-                app.repeat = !app.repeat;
-                let status = if app.repeat { "循环: 开" } else { "循环: 关" };
-                app.set_status(status);
+                app.play_mode = app.play_mode.next();
+                app.set_status(format!("{} {}", app.play_mode.icon(), app.play_mode.as_str()));
             }
             
             // Rescan - enter confirm mode

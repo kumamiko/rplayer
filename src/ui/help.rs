@@ -40,6 +40,14 @@ impl Widget for HelpWidget {
                 Span::styled("  PageUp/Down  ", Style::default().fg(Color::Yellow)),
                 Span::raw("翻页"),
             ]),
+            Line::from(vec![
+                Span::styled("  ←/→          ", Style::default().fg(Color::Yellow)),
+                Span::raw("翻页"),
+            ]),
+            Line::from(vec![
+                Span::styled("  u/d          ", Style::default().fg(Color::Yellow)),
+                Span::raw("上/下翻页"),
+            ]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("  Enter        ", Style::default().fg(Color::Yellow)),
@@ -55,11 +63,11 @@ impl Widget for HelpWidget {
             ]),
             Line::from(vec![
                 Span::styled("  n/p          ", Style::default().fg(Color::Yellow)),
-                Span::raw("下一/上一曲"),
+                Span::raw("下/上一曲"),
             ]),
             Line::from(vec![
                 Span::styled("  r            ", Style::default().fg(Color::Yellow)),
-                Span::raw("切换循环"),
+                Span::raw("切换播放模式"),
             ]),
             Line::from(""),
             Line::from(vec![
@@ -69,6 +77,10 @@ impl Widget for HelpWidget {
             Line::from(vec![
                 Span::styled("  /, f         ", Style::default().fg(Color::Yellow)),
                 Span::raw("搜索"),
+            ]),
+            Line::from(vec![
+                Span::styled("  F            ", Style::default().fg(Color::Yellow)),
+                Span::raw("取消搜索"),
             ]),
             Line::from(vec![
                 Span::styled("  R            ", Style::default().fg(Color::Yellow)),
@@ -94,7 +106,7 @@ impl Widget for HelpWidget {
         
         // Calculate centered popup position
         let popup_width = 36u16;
-        let popup_height = 22u16;
+        let popup_height = 25u16;
         let popup_area = Rect {
             x: area.x + (area.width.saturating_sub(popup_width)) / 2,
             y: area.y + (area.height.saturating_sub(popup_height)) / 2,

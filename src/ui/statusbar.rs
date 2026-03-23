@@ -1,4 +1,4 @@
-use crate::app::{App, Mode};
+use crate::app::{App, Mode, PlayMode};
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -68,8 +68,12 @@ impl<'a> Widget for StatusbarWidget<'a> {
         };
         let mode_text = format!(" {} ", self.app.mode.as_str());
         
-        // Repeat indicator
-        let repeat_text = if self.app.repeat { " 🔁" } else { "" };
+        // Play mode indicator (only show if not None)
+        let play_mode_text = if self.app.play_mode != PlayMode::None {
+            format!(" {}", self.app.play_mode.icon())
+        } else {
+            String::new()
+        };
         
         // Right: Song name + progress
         let pos = Self::format_duration(self.app.current_pos);
@@ -87,15 +91,15 @@ impl<'a> Widget for StatusbarWidget<'a> {
         };
         
         // Calculate padding to right-align song info
-        let mode_width = UnicodeWidthStr::width(mode_text.as_str()) + UnicodeWidthStr::width(repeat_text) + 1; // +1 for space
+        let mode_width = UnicodeWidthStr::width(mode_text.as_str()) + UnicodeWidthStr::width(play_mode_text.as_str()) + 1; // +1 for space
         let info_width = UnicodeWidthStr::width(song_info.as_str());
         let total_width = area.width as usize;
         let padding = total_width.saturating_sub(mode_width + info_width);
         
-        // Build line: [MODE][🔁] <padding> [song info (right aligned)]
+        // Build line: [MODE][icon] <padding> [song info (right aligned)]
         let line = Line::from(vec![
             Span::styled(mode_text, mode_style),
-            Span::styled(repeat_text, Style::default().fg(Color::Cyan)),
+            Span::styled(play_mode_text, Style::default().fg(Color::Cyan)),
             Span::raw(" ".repeat(padding)),
             Span::styled(song_info, Style::default().fg(Color::White)),
         ]);

@@ -22,3 +22,49 @@ impl Mode {
         }
     }
 }
+
+/// Playback mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PlayMode {
+    /// No repeat
+    #[default]
+    None,
+    /// Repeat single song
+    Single,
+    /// Repeat all songs in list
+    All,
+    /// Shuffle playback
+    Shuffle,
+}
+
+impl PlayMode {
+    /// Cycle to next play mode: None -> Single -> All -> Shuffle -> None
+    pub fn next(&self) -> Self {
+        match self {
+            PlayMode::None => PlayMode::Single,
+            PlayMode::Single => PlayMode::All,
+            PlayMode::All => PlayMode::Shuffle,
+            PlayMode::Shuffle => PlayMode::None,
+        }
+    }
+    
+    /// Get display string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PlayMode::None => "顺序播放",
+            PlayMode::Single => "单曲循环",
+            PlayMode::All => "列表循环",
+            PlayMode::Shuffle => "随机播放",
+        }
+    }
+    
+    /// Get icon
+    pub fn icon(&self) -> &'static str {
+        match self {
+            PlayMode::None => "→",
+            PlayMode::Single => "🔂",
+            PlayMode::All => "🔁",
+            PlayMode::Shuffle => "🔀",
+        }
+    }
+}

@@ -13,7 +13,7 @@ use std::io::stdout;
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
-use super::Mode;
+use super::{Mode, PlayMode};
 
 pub struct App {
     pub mode: Mode,
@@ -31,7 +31,7 @@ pub struct App {
     pub is_playing: bool,
     pub current_pos: Duration,
     pub duration: Duration,
-    pub repeat: bool,
+    pub play_mode: PlayMode,
     
     // Search
     pub search_query: String,
@@ -97,7 +97,7 @@ impl Default for App {
             is_playing: false,
             current_pos: Duration::ZERO,
             duration: Duration::ZERO,
-            repeat: false,
+            play_mode: PlayMode::None,
             search_query: String::new(),
             status_message: String::new(),
             status_expiry: None,
@@ -463,17 +463,35 @@ impl App {
         let current_filtered = self.current_song_index
             .and_then(|idx| self.filtered_indices.iter().position(|&i| i == idx));
         
-        let next = if let Some(pos) = current_filtered {
-            if pos + 1 < self.filtered_indices.len() {
-                pos + 1
-            } else if self.repeat {
-                0
-            } else {
-                self.stop(audio_player);
-                return;
+        let next = match self.play_mode {
+            PlayMode::Single => {
+                // Repeat current song
+                if let Some(pos) = current_filtered {
+                    pos
+                } else {
+                    0
+                }
             }
-        } else {
-            0
+            PlayMode::Shuffle => {
+                // Random next song
+                use rand::Rng;
+                let mut rng = rand::rng();
+                rng.random_range(0..self.filtered_indices.len())
+            }
+            PlayMode::All | PlayMode::None => {
+                if let Some(pos) = current_filtered {
+                    if pos + 1 < self.filtered_indices.len() {
+                        pos + 1
+                    } else if self.play_mode == PlayMode::All {
+                        0
+                    } else {
+                        self.stop(audio_player);
+                        return;
+                    }
+                } else {
+                    0
+                }
+            }
         };
         
         self.selected_index = next;
