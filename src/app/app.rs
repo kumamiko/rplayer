@@ -72,12 +72,16 @@ impl Default for App {
 }
 
 impl App {
-    pub fn new() -> Result<Self> {
+    pub fn new(music_dir: Option<String>) -> Result<Self> {
         let config = Config::load()?;
         let mut app = Self {
             config,
             ..Self::default()
         };
+        // Use command line arg if provided, otherwise use config
+        if let Some(dir) = music_dir {
+            app.config.music_folder = dir;
+        }
         app.scan_music_folder()?;
         Ok(app)
     }

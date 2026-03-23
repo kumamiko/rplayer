@@ -45,11 +45,11 @@ impl InputHandler {
                 app.selected_index = app.filtered_indices.len().saturating_sub(1);
                 app.scroll_offset = app.selected_index.saturating_sub(5); // Show some context above
             }
-            KeyCode::PageDown => {
+            KeyCode::PageDown | KeyCode::Right => {
                 let jump = 10.min(app.filtered_indices.len().saturating_sub(app.selected_index + 1));
                 app.selected_index += jump;
             }
-            KeyCode::PageUp => {
+            KeyCode::PageUp | KeyCode::Left => {
                 let jump = 10.min(app.selected_index);
                 app.selected_index -= jump;
             }
