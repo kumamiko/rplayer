@@ -77,6 +77,10 @@ impl InputHandler {
             }
             
             // Search mode
+            KeyCode::Char('f') if key.modifiers == KeyModifiers::CONTROL => {
+                app.search_mode = app.search_mode.next();
+                app.set_status(format!("搜索字段: {}", app.search_mode.as_str()));
+            }
             KeyCode::Char('/') | KeyCode::Char('f') => {
                 app.mode = Mode::Search;
                 app.search_query.clear();
@@ -130,6 +134,10 @@ impl InputHandler {
             }
             KeyCode::Backspace => {
                 app.search_query.pop();
+            }
+            KeyCode::Char('f') if key.modifiers == KeyModifiers::CONTROL => {
+                app.search_mode = app.search_mode.next();
+                app.set_status(format!("搜索字段: {}", app.search_mode.as_str()));
             }
             KeyCode::Char(c) => {
                 app.search_query.push(c);

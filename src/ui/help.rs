@@ -79,6 +79,10 @@ impl Widget for HelpWidget {
                 Span::raw("搜索"),
             ]),
             Line::from(vec![
+                Span::styled("  Ctrl+f       ", Style::default().fg(Color::Yellow)),
+                Span::raw("切换搜索字段"),
+            ]),
+            Line::from(vec![
                 Span::styled("  F            ", Style::default().fg(Color::Yellow)),
                 Span::raw("取消搜索"),
             ]),
@@ -106,7 +110,7 @@ impl Widget for HelpWidget {
         
         // Calculate centered popup position
         let popup_width = 36u16;
-        let popup_height = 25u16;
+        let popup_height = 26u16;
         let popup_area = Rect {
             x: area.x + (area.width.saturating_sub(popup_width)) / 2,
             y: area.y + (area.height.saturating_sub(popup_height)) / 2,

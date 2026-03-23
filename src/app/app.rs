@@ -13,7 +13,7 @@ use std::io::stdout;
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
-use super::{Mode, PlayMode};
+use super::{Mode, PlayMode, SearchMode};
 
 pub struct App {
     pub mode: Mode,
@@ -35,6 +35,7 @@ pub struct App {
     
     // Search
     pub search_query: String,
+    pub search_mode: SearchMode,
     
     // Status message
     pub status_message: String,
@@ -99,6 +100,7 @@ impl Default for App {
             duration: Duration::ZERO,
             play_mode: PlayMode::None,
             search_query: String::new(),
+            search_mode: SearchMode::default(),
             status_message: String::new(),
             status_expiry: None,
         }
@@ -563,10 +565,27 @@ impl App {
         } else {
             let query = self.search_query.to_lowercase();
             for (i, song) in self.songs.iter().enumerate() {
-                if song.title.to_lowercase().contains(&query)
-                    || song.artist.to_lowercase().contains(&query)
-                    || song.album.to_lowercase().contains(&query)
-                {
+                let matches = match self.search_mode {
+                    SearchMode::TitleArtist => {
+                        song.title.to_lowercase().contains(&query)
+                            || song.artist.to_lowercase().contains(&query)
+                    }
+                    SearchMode::Artist => {
+                        song.artist.to_lowercase().contains(&query)
+                    }
+                    SearchMode::Album => {
+                        song.album.to_lowercase().contains(&query)
+                    }
+                    SearchMode::Filename => {
+                        // Extract filename from path
+                        std::path::Path::new(&song.path)
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .map(|n| n.to_lowercase().contains(&query))
+                            .unwrap_or(false)
+                    }
+                };
+                if matches {
                     self.filtered_indices.push(i);
                 }
             }
@@ -574,7 +593,7 @@ impl App {
         
         self.selected_index = 0;
         self.scroll_offset = 0;
-        self.status_message = format!("匹配到 {} 首", self.filtered_indices.len());
+        self.status_message = format!("匹配到 {} 首 ({})", self.filtered_indices.len(), self.search_mode.as_str());
     }
     
     pub fn set_status(&mut self, msg: impl Into<String>) {

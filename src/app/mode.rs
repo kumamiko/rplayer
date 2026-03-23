@@ -23,6 +23,42 @@ impl Mode {
     }
 }
 
+/// Search field mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SearchMode {
+    /// Search in title or artist (default)
+    #[default]
+    TitleArtist,
+    /// Search in artist only
+    Artist,
+    /// Search in album only
+    Album,
+    /// Search in filename only
+    Filename,
+}
+
+impl SearchMode {
+    /// Cycle to next search mode: TitleArtist -> Artist -> Album -> Filename -> TitleArtist
+    pub fn next(&self) -> Self {
+        match self {
+            SearchMode::TitleArtist => SearchMode::Artist,
+            SearchMode::Artist => SearchMode::Album,
+            SearchMode::Album => SearchMode::Filename,
+            SearchMode::Filename => SearchMode::TitleArtist,
+        }
+    }
+    
+    /// Get display string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SearchMode::TitleArtist => "歌曲/歌手",
+            SearchMode::Artist => "歌手",
+            SearchMode::Album => "专辑",
+            SearchMode::Filename => "文件名",
+        }
+    }
+}
+
 /// Playback mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PlayMode {
