@@ -14,6 +14,8 @@ impl InputHandler {
         match app.mode {
             Mode::Normal => self.handle_normal(app, audio_player, key),
             Mode::Search => self.handle_search(app, key),
+            Mode::ConfirmRefresh => self.handle_confirm_refresh(app, audio_player, key),
+            Mode::Help => self.handle_help(app, key),
         }
     }
     
@@ -75,19 +77,27 @@ impl InputHandler {
             }
             
             // Search mode
-            KeyCode::Char('/') => {
+            KeyCode::Char('/') | KeyCode::Char('f') => {
                 app.mode = Mode::Search;
                 app.search_query.clear();
             }
             
-            // Rescan
+            // Toggle repeat mode
             KeyCode::Char('r') if key.modifiers == KeyModifiers::NONE => {
-                app.scan_music_folder()?;
+                app.repeat = !app.repeat;
+                let status = if app.repeat { "循环: 开" } else { "循环: 关" };
+                app.set_status(status);
+            }
+            
+            // Rescan - enter confirm mode
+            KeyCode::Char('R') => {
+                app.mode = Mode::ConfirmRefresh;
+                app.set_status("确认重新扫描媒体库？ (y/n)");
             }
             
             // Help
             KeyCode::Char('?') => {
-                app.set_status("j/k:导航 | h/l:快进 | Enter:播放 | Space:暂停 | /:搜索 | q:退出");
+                app.mode = Mode::Help;
             }
             
             _ => {}
@@ -124,6 +134,31 @@ impl InputHandler {
             app.apply_filter();
         }
         
+        Ok(())
+    }
+    
+    fn handle_confirm_refresh(&self, app: &mut App, _audio_player: &mut AudioPlayer, key: KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                app.mode = Mode::Normal;
+                app.scan_music_folder()?;
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                app.mode = Mode::Normal;
+                app.set_status("已取消");
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    
+    fn handle_help(&self, app: &mut App, key: KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
+                app.mode = Mode::Normal;
+            }
+            _ => {}
+        }
         Ok(())
     }
 }

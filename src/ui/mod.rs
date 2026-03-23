@@ -4,12 +4,14 @@ mod lyrics;
 mod statusbar;
 mod search;
 mod message;
+mod help;
 
 pub use playlist::*;
 pub use lyrics::*;
 pub use statusbar::*;
 pub use search::*;
 pub use message::*;
+pub use help::*;
 
 use crate::app::App;
 use crate::lyrics::LyricsManager;
@@ -48,6 +50,12 @@ impl<'a> Ui<'a> {
         if self.app.mode == crate::app::Mode::Search {
             let search = SearchWidget::new(&self.app.search_query);
             f.render_widget(search, chunks.statusbar);
+        }
+        
+        // Help popup (when in help mode)
+        if self.app.mode == crate::app::Mode::Help {
+            let help = HelpWidget::new();
+            f.render_widget(help, f.area());
         }
     }
 }

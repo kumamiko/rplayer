@@ -7,8 +7,11 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyEventKind};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::stdout;
-use std::time::{Duration, Instant};
+use std::path::PathBuf;
+use std::time::{Duration, Instant, SystemTime};
 
 use super::Mode;
 
@@ -28,6 +31,7 @@ pub struct App {
     pub is_playing: bool,
     pub current_pos: Duration,
     pub duration: Duration,
+    pub repeat: bool,
     
     // Search
     pub search_query: String,
@@ -37,13 +41,46 @@ pub struct App {
     pub status_expiry: Option<Instant>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Song {
     pub path: String,
     pub title: String,
     pub artist: String,
     pub album: String,
+    #[serde(with = "duration_serde")]
     pub duration: Duration,
+    /// File modification time for cache invalidation
+    pub mtime: u64,
+}
+
+/// Helper module for serializing Duration
+mod duration_serde {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        duration.as_secs().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let secs = u64::deserialize(deserializer)?;
+        Ok(Duration::from_secs(secs))
+    }
+}
+
+/// Cache structure for storing songs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SongsCache {
+    /// Music folder path this cache is for
+    pub music_folder: String,
+    /// List of cached songs
+    pub songs: Vec<Song>,
 }
 
 impl Default for App {
@@ -60,6 +97,7 @@ impl Default for App {
             is_playing: false,
             current_pos: Duration::ZERO,
             duration: Duration::ZERO,
+            repeat: false,
             search_query: String::new(),
             status_message: String::new(),
             status_expiry: None,
@@ -74,9 +112,10 @@ impl App {
             config,
             ..Self::default()
         };
-        // Use command line arg if provided, otherwise use config
+        // Use command line arg if provided, save to config
         if let Some(dir) = music_dir {
             app.config.music_folder = dir;
+            app.config.save()?;
         }
         app.scan_music_folder()?;
         Ok(app)
@@ -165,13 +204,87 @@ impl App {
     }
     
     pub fn scan_music_folder(&mut self) -> Result<()> {
-        use walkdir::WalkDir;
-        
         let music_dir = if self.config.music_folder.is_empty() {
             dirs::audio_dir().unwrap_or_else(|| std::path::PathBuf::from("."))
         } else {
             std::path::PathBuf::from(&self.config.music_folder)
         };
+        
+        let music_dir_str = music_dir.to_str().unwrap_or(".").to_string();
+        
+        // Try to load cache
+        let cache = self.load_cache(&music_dir_str);
+        
+        if let Some(ref cached) = cache {
+            // Incremental update
+            self.incremental_scan(music_dir, cached)?;
+        } else {
+            // Full scan
+            self.full_scan(music_dir)?;
+        }
+        
+        // Save cache after scanning
+        self.save_cache(&music_dir_str)?;
+        
+        self.status_message = format!("发现 {} 首歌曲", self.songs.len());
+        Ok(())
+    }
+    
+    /// Get cache file path (unique per music folder)
+    fn cache_path(music_folder: &str) -> PathBuf {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        music_folder.hash(&mut hasher);
+        let hash = hasher.finish();
+        
+        let cache_dir = std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("cache");
+        
+        // Create cache directory if not exists
+        let _ = std::fs::create_dir_all(&cache_dir);
+        
+        cache_dir.join(format!("songs_cache_{:016x}.json", hash))
+    }
+    
+    /// Load cache from file
+    fn load_cache(&self, music_folder: &str) -> Option<SongsCache> {
+        let path = Self::cache_path(music_folder);
+        if !path.exists() {
+            return None;
+        }
+        
+        let content = std::fs::read_to_string(path).ok()?;
+        let cache: SongsCache = serde_json::from_str(&content).ok()?;
+        
+        // Validate cache is for the same music folder
+        if cache.music_folder == music_folder {
+            Some(cache)
+        } else {
+            None
+        }
+    }
+    
+    /// Save cache to file
+    fn save_cache(&self, music_folder: &str) -> Result<()> {
+        let cache = SongsCache {
+            music_folder: music_folder.to_string(),
+            songs: self.songs.clone(),
+        };
+        
+        let path = Self::cache_path(music_folder);
+        let content = serde_json::to_string_pretty(&cache)?;
+        std::fs::write(path, content)?;
+        Ok(())
+    }
+    
+    /// Full scan - parse all files
+    fn full_scan(&mut self, music_dir: PathBuf) -> Result<()> {
+        use walkdir::WalkDir;
         
         let extensions = ["mp3", "flac", "wav", "ogg", "m4a", "aac"];
         
@@ -190,8 +303,78 @@ impl App {
             }
         }
         
-        self.status_message = format!("发现 {} 首歌曲", self.songs.len());
         Ok(())
+    }
+    
+    /// Incremental scan - only scan changed files
+    fn incremental_scan(&mut self, music_dir: PathBuf, cached: &SongsCache) -> Result<()> {
+        use walkdir::WalkDir;
+        
+        let extensions = ["mp3", "flac", "wav", "ogg", "m4a", "aac"];
+        
+        // Build a map from path to cached song for fast lookup
+        let cached_map: HashMap<String, &Song> = cached.songs.iter()
+            .map(|s| (s.path.clone(), s))
+            .collect();
+        
+        self.songs.clear();
+        self.filtered_indices.clear();
+        
+        let mut new_count = 0;
+        let mut updated_count = 0;
+        let mut cached_count = 0;
+        
+        for entry in WalkDir::new(music_dir).into_iter().filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if extensions.contains(&ext.to_lowercase().as_str()) {
+                    let path_str = path.to_str().unwrap_or("").to_string();
+                    
+                    // Get current file mtime
+                    let current_mtime = self.get_file_mtime(path);
+                    
+                    // Check if we have cached data
+                    if let Some(&cached_song) = cached_map.get(&path_str) {
+                        if cached_song.mtime == current_mtime {
+                            // File unchanged, use cached data
+                            self.filtered_indices.push(self.songs.len());
+                            self.songs.push(cached_song.clone());
+                            cached_count += 1;
+                            continue;
+                        } else {
+                            // File modified, re-parse
+                            updated_count += 1;
+                        }
+                    } else {
+                        // New file
+                        new_count += 1;
+                    }
+                    
+                    // Parse new or modified file
+                    if let Ok(song) = self.parse_song(path) {
+                        self.filtered_indices.push(self.songs.len());
+                        self.songs.push(song);
+                    }
+                }
+            }
+        }
+        
+        if new_count > 0 || updated_count > 0 {
+            self.status_message = format!(
+                "缓存: {} 首 | 新增: {} | 更新: {}",
+                cached_count, new_count, updated_count
+            );
+        }
+        
+        Ok(())
+    }
+    
+    /// Get file modification time as unix timestamp
+    fn get_file_mtime(&self, path: &std::path::Path) -> u64 {
+        path.metadata()
+            .and_then(|m| m.modified())
+            .map(|t| t.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_secs())
+            .unwrap_or(0)
     }
     
     fn parse_song(&self, path: &std::path::Path) -> Result<Song> {
@@ -204,6 +387,7 @@ impl App {
         let properties = tagged_file.properties();
         
         let duration = properties.duration();
+        let mtime = self.get_file_mtime(path);
         
         let (title, artist, album) = if let Some(tag) = tag {
             (
@@ -231,6 +415,7 @@ impl App {
             artist,
             album,
             duration,
+            mtime,
         })
     }
     
@@ -281,7 +466,7 @@ impl App {
         let next = if let Some(pos) = current_filtered {
             if pos + 1 < self.filtered_indices.len() {
                 pos + 1
-            } else if self.config.repeat {
+            } else if self.repeat {
                 0
             } else {
                 self.stop(audio_player);

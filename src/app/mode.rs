@@ -6,13 +6,19 @@ pub enum Mode {
     Normal,
     /// Search mode: typing search query
     Search,
+    /// Confirm dialog: waiting for user confirmation
+    ConfirmRefresh,
+    /// Help dialog: showing keybindings
+    Help,
 }
 
 impl Mode {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Mode::Normal => "普通",
-            Mode::Search => "搜索",
+            Mode::Normal => "Normal",
+            Mode::Search => "Search",
+            Mode::ConfirmRefresh => "Confirm",
+            Mode::Help => "Help",
         }
     }
 }

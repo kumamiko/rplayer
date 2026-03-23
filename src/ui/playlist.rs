@@ -59,9 +59,9 @@ impl<'a> PlaylistWidget<'a> {
 impl<'a> Widget for PlaylistWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         // Calculate dynamic widths based on available area
-        // Layout: [prefix(2)] [title] [artist] [duration(6)]
-        // Subtract borders(2), prefix(2), spaces(3), duration(6)
-        let available_width = area.width.saturating_sub(13) as usize;
+        // Layout: [prefix(2)] [index(4)] [title] [artist] [duration(6)]
+        // Subtract borders(2), prefix(2), index(4), spaces(4), duration(6)
+        let available_width = area.width.saturating_sub(18) as usize;
         let title_width = (available_width * 3 / 5).max(10);  // 60% for title, min 10
         let artist_width = (available_width - title_width).max(5);  // remaining for artist, min 5
         
@@ -87,6 +87,10 @@ impl<'a> Widget for PlaylistWidget<'a> {
                     " "
                 };
                 
+                // Index (1-based)
+                let index = display_idx + 1;
+                let index_str = format!("{:3}.", index);
+                
                 let style = if is_selected {
                     Style::default()
                         .bg(Color::Blue)
@@ -98,6 +102,7 @@ impl<'a> Widget for PlaylistWidget<'a> {
                 
                 let line = Line::from(vec![
                     Span::styled(format!("{} ", prefix), Style::default().fg(Color::Green)),
+                    Span::styled(format!("{} ", index_str), Style::default().fg(Color::DarkGray)),
                     Span::styled(format!("{} ", title), style),
                     Span::styled(format!("{} ", artist), Style::default().fg(Color::DarkGray)),
                     Span::styled(duration, Style::default().fg(Color::Gray)),

@@ -9,15 +9,6 @@ pub struct Config {
     
     /// Default volume (0.0 - 1.0)
     pub volume: f32,
-    
-    /// Enable repeat mode
-    pub repeat: bool,
-    
-    /// Show file extensions in playlist
-    pub show_extensions: bool,
-    
-    /// Lyrics font size multiplier (for future use)
-    pub lyrics_scale: u8,
 }
 
 impl Default for Config {
@@ -25,9 +16,6 @@ impl Default for Config {
         Self {
             music_folder: String::new(),
             volume: 0.7,
-            repeat: false,
-            show_extensions: false,
-            lyrics_scale: 1,
         }
     }
 }
