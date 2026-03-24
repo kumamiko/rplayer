@@ -6,16 +6,12 @@ use std::path::PathBuf;
 pub struct Config {
     /// Music folder to scan
     pub music_folder: String,
-    
-    /// Default volume (0.0 - 1.0)
-    pub volume: f32,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             music_folder: String::new(),
-            volume: 0.7,
         }
     }
 }

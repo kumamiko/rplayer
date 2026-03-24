@@ -9,6 +9,9 @@ use std::time::{Duration, Instant};
 
 static DECODER_PANIC: AtomicBool = AtomicBool::new(false);
 
+/// Default volume (80%)
+const DEFAULT_VOLUME: f32 = 0.8;
+
 pub struct AudioPlayer {
     _stream: Option<OutputStream>,
     _stream_handle: Option<OutputStreamHandle>,
@@ -18,6 +21,7 @@ pub struct AudioPlayer {
     is_paused: bool,
     current_path: Option<String>,
     total_duration: Option<Duration>,
+    volume: f32,
 }
 
 impl AudioPlayer {
@@ -31,6 +35,7 @@ impl AudioPlayer {
             is_paused: false,
             current_path: None,
             total_duration: None,
+            volume: DEFAULT_VOLUME,
         })
     }
     
@@ -73,6 +78,7 @@ impl AudioPlayer {
         // Create new audio stream
         let (stream, stream_handle) = OutputStream::try_default()?;
         let sink = Sink::try_new(&stream_handle)?;
+        sink.set_volume(self.volume);
         
         let source = Self::create_decoder(path)?;
         
@@ -141,13 +147,14 @@ impl AudioPlayer {
     }
     
     pub fn set_volume(&mut self, volume: f32) {
+        self.volume = volume;
         if let Some(ref sink) = self.sink {
             sink.set_volume(volume);
         }
     }
     
     pub fn get_volume(&self) -> f32 {
-        self.sink.as_ref().map_or(1.0, |s| s.volume())
+        self.volume
     }
     
     pub fn seek_relative(&mut self, forward: bool, secs: u64) -> Result<()> {
@@ -185,6 +192,7 @@ impl AudioPlayer {
         // Create new audio stream
         let (stream, stream_handle) = OutputStream::try_default()?;
         let sink = Sink::try_new(&stream_handle)?;
+        sink.set_volume(self.volume);
         
         let source = Self::create_decoder(&path)?
             .skip_duration(new_pos);
