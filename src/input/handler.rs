@@ -112,6 +112,11 @@ impl InputHandler {
                 app.play_mode = app.play_mode.next();
                 app.set_status(format!("{} {}", app.play_mode.icon(), app.play_mode.as_str()));
             }
+
+            // Toggle sort mode
+            KeyCode::Char('t') => {
+                app.cycle_sort();
+            }
             
             // Rescan - enter confirm mode
             KeyCode::Char('R') => {

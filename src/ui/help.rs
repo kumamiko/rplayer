@@ -73,6 +73,10 @@ impl Widget for HelpWidget {
                 Span::styled("  r            ", Style::default().fg(Color::Yellow)),
                 Span::raw("切换播放模式"),
             ]),
+            Line::from(vec![
+                Span::styled("  t            ", Style::default().fg(Color::Yellow)),
+                Span::raw("切换排序方式"),
+            ]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("  +/-          ", Style::default().fg(Color::Yellow)),
@@ -114,7 +118,7 @@ impl Widget for HelpWidget {
         
         // Calculate centered popup position
         let popup_width = 36u16;
-        let popup_height = 26u16;
+        let popup_height = 28u16;
         let popup_area = Rect {
             x: area.x + (area.width.saturating_sub(popup_width)) / 2,
             y: area.y + (area.height.saturating_sub(popup_height)) / 2,

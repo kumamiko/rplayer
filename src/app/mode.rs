@@ -59,6 +59,42 @@ impl SearchMode {
     }
 }
 
+/// Sorting mode for the playlist
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SortMode {
+    /// Sort by filename (default, original order)
+    #[default]
+    Filename,
+    /// Sort by artist
+    Artist,
+    /// Sort by album
+    Album,
+    /// Sort by parent folder
+    Folder,
+}
+
+impl SortMode {
+    /// Cycle to next sort mode: Filename -> Artist -> Album -> Folder -> Filename
+    pub fn next(&self) -> Self {
+        match self {
+            SortMode::Filename => SortMode::Artist,
+            SortMode::Artist => SortMode::Album,
+            SortMode::Album => SortMode::Folder,
+            SortMode::Folder => SortMode::Filename,
+        }
+    }
+
+    /// Get display string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SortMode::Filename => "文件名",
+            SortMode::Artist => "歌手",
+            SortMode::Album => "专辑",
+            SortMode::Folder => "文件夹",
+        }
+    }
+}
+
 /// Playback mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PlayMode {

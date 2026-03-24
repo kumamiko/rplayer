@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant, SystemTime};
 
-use super::{Mode, PlayMode, SearchMode};
+use super::{Mode, PlayMode, SearchMode, SortMode};
 
 pub struct App {
     pub mode: Mode,
@@ -37,6 +37,7 @@ pub struct App {
     // Search
     pub search_query: String,
     pub search_mode: SearchMode,
+    pub sort_mode: SortMode,
     
     // Status message
     pub status_message: String,
@@ -120,6 +121,7 @@ impl Default for App {
             play_mode: PlayMode::None,
             search_query: String::new(),
             search_mode: SearchMode::default(),
+            sort_mode: SortMode::default(),
             status_message: String::new(),
             status_expiry: None,
             scanning: false,
@@ -600,10 +602,10 @@ impl App {
             self.scroll_offset = self.selected_index - visible_height + 1;
         }
     }
-    
+
     pub fn apply_filter(&mut self) {
         self.filtered_indices.clear();
-        
+
         if self.search_query.is_empty() {
             self.filtered_indices = (0..self.songs.len()).collect();
         } else {
@@ -621,7 +623,6 @@ impl App {
                         song.album.to_lowercase().contains(&query)
                     }
                     SearchMode::Filename => {
-                        // Extract filename from path
                         std::path::Path::new(&song.path)
                             .file_name()
                             .and_then(|n| n.to_str())
@@ -634,12 +635,86 @@ impl App {
                 }
             }
         }
-        
+
+        // Apply current sort order
+        self.sort_songs();
+
         self.selected_index = 0;
         self.scroll_offset = 0;
         self.status_message = format!("匹配到 {} 首 ({})", self.filtered_indices.len(), self.search_mode.as_str());
     }
-    
+
+    pub fn sort_songs(&mut self) {
+        let songs = &self.songs;
+        let sort_mode = self.sort_mode;
+
+        // Sort filtered_indices by the sort criteria
+        self.filtered_indices.sort_by(|&a, &b| {
+            let sa = &songs[a];
+            let sb = &songs[b];
+            match sort_mode {
+                SortMode::Filename => {
+                    sa.path.cmp(&sb.path)
+                }
+                SortMode::Artist => {
+                    let cmp = sa.artist.to_lowercase().cmp(&sb.artist.to_lowercase());
+                    if cmp != std::cmp::Ordering::Equal {
+                        cmp
+                    } else {
+                        sa.title.to_lowercase().cmp(&sb.title.to_lowercase())
+                    }
+                }
+                SortMode::Album => {
+                    let cmp = sa.album.to_lowercase().cmp(&sb.album.to_lowercase());
+                    if cmp != std::cmp::Ordering::Equal {
+                        cmp
+                    } else {
+                        sa.title.to_lowercase().cmp(&sb.title.to_lowercase())
+                    }
+                }
+                SortMode::Folder => {
+                    let dir_a = std::path::Path::new(&sa.path).parent()
+                        .and_then(|p| p.to_str()).unwrap_or("");
+                    let dir_b = std::path::Path::new(&sb.path).parent()
+                        .and_then(|p| p.to_str()).unwrap_or("");
+                    let cmp = dir_a.to_lowercase().cmp(&dir_b.to_lowercase());
+                    if cmp != std::cmp::Ordering::Equal {
+                        cmp
+                    } else {
+                        sa.title.to_lowercase().cmp(&sb.title.to_lowercase())
+                    }
+                }
+            }
+        });
+    }
+
+    pub fn cycle_sort(&mut self) {
+        self.sort_mode = self.sort_mode.next();
+
+        // Apply filter (which also sorts), but preserve selected song
+        let selected_song = self.filtered_indices.get(self.selected_index).copied();
+        if self.search_query.is_empty() {
+            self.filtered_indices = (0..self.songs.len()).collect();
+        } else {
+            self.apply_filter();
+            return; // apply_filter already resets selection and sorts
+        }
+        self.sort_songs();
+
+        // Try to restore selection to the same song
+        if let Some(song_idx) = selected_song {
+            if let Some(pos) = self.filtered_indices.iter().position(|&i| i == song_idx) {
+                self.selected_index = pos;
+                self.adjust_scroll();
+            } else {
+                self.selected_index = 0;
+                self.scroll_offset = 0;
+            }
+        }
+
+        self.set_status(format!("排序: {}", self.sort_mode.as_str()));
+    }
+
     pub fn set_status(&mut self, msg: impl Into<String>) {
         self.status_message = msg.into();
         self.status_expiry = Some(Instant::now() + Duration::from_secs(3));
