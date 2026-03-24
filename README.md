@@ -2,6 +2,8 @@
 
 基于 Rust 的终端音乐播放器，支持歌词显示和 Vim 风格快捷键。
 
+Powered by GLM-5
+
 ## 功能特性
 
 - 本地音乐播放，自动扫描媒体库
@@ -57,14 +59,6 @@ cargo build --release
 ./target/release/rplayer
 ```
 
-### 指定音乐目录
-
-通过命令行参数指定音乐目录（首次运行后自动保存到配置）：
-
-```bash
-./target/release/rplayer -d /path/to/music
-```
-
 ### 交叉编译到 Windows
 
 需要安装 MinGW 工具链：
@@ -96,7 +90,7 @@ cargo build --target x86_64-pc-windows-gnu --release
 
 #### 导航
 
-所有导航命令支持数字前缀（如 `5j` 向下移动 5 行，`10g` 跳转到第 10 行）。
+所有导航命令(除`G`、`` ` ``、`'` 外)均支持数字前缀（如 `5j` 向下移动 5 行，`10g` 跳转到第 10 行）。
 
 | 按键 | 功能 |
 |------|------|
