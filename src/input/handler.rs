@@ -221,6 +221,8 @@ impl InputHandler {
                 app.selected_index = 0;
                 app.scroll_offset = 0;
                 app.mode = Mode::Normal;
+                app.status_message.clear();
+                app.status_expiry = None;
             }
             KeyCode::Enter => {
                 app.apply_filter();

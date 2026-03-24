@@ -179,36 +179,39 @@ impl AudioPlayer {
             new_pos
         };
         
-        // Don't seek to very beginning
         let new_pos = new_pos.max(Duration::ZERO);
-        
-        // Stop and restart with skip
+        self.seek_to(&path, new_pos)
+    }
+
+    fn seek_to(&mut self, path: &str, pos: Duration) -> Result<()> {
+        // Stop current sink but reuse stream if possible
         if let Some(sink) = self.sink.take() {
             sink.stop();
         }
-        self._stream = None;
-        self._stream_handle = None;
-        
-        // Create new audio stream
-        let (stream, stream_handle) = OutputStream::try_default()?;
-        let sink = Sink::try_new(&stream_handle)?;
+
+        // Reuse existing stream or create new one
+        if self._stream.is_none() || self._stream_handle.is_none() {
+            let (stream, stream_handle) = OutputStream::try_default()?;
+            self._stream = Some(stream);
+            self._stream_handle = Some(stream_handle);
+        }
+
+        let sink = Sink::try_new(self._stream_handle.as_ref().unwrap())?;
         sink.set_volume(self.volume);
-        
-        let source = Self::create_decoder(&path)?
-            .skip_duration(new_pos);
-        
+
+        let source = Self::create_decoder(path)?
+            .skip_duration(pos);
+
         sink.append(source);
         if self.is_paused {
             sink.pause();
         } else {
             sink.play();
         }
-        
-        self._stream = Some(stream);
-        self._stream_handle = Some(stream_handle);
+
         self.sink = Some(sink);
-        self.start_time = Some(Instant::now() - new_pos);
-        self.paused_at = if self.is_paused { Some(new_pos) } else { None };
+        self.start_time = Some(Instant::now() - pos);
+        self.paused_at = if self.is_paused { Some(pos) } else { None };
         
         Ok(())
     }
