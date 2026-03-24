@@ -48,6 +48,10 @@ impl Widget for HelpWidget {
                 Span::styled("  u/d          ", Style::default().fg(Color::Yellow)),
                 Span::raw("上/下翻页"),
             ]),
+            Line::from(vec![
+                Span::styled("  `/\'          ", Style::default().fg(Color::Yellow)),
+                Span::raw("跳到当前播放"),
+            ]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("  Enter        ", Style::default().fg(Color::Yellow)),

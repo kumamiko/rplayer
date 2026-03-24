@@ -58,13 +58,26 @@ impl<'a> PlaylistWidget<'a> {
 
 impl<'a> Widget for PlaylistWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // Calculate dynamic widths based on available area
-        // Layout: [prefix(2)] [index(4)] [title] [artist] [duration(6)]
-        // Subtract borders(2), prefix(2), index(4), spaces(4), duration(6)
-        let available_width = area.width.saturating_sub(18) as usize;
-        let title_width = (available_width * 3 / 5).max(10);  // 60% for title, min 10
-        let artist_width = (available_width - title_width).max(5);  // remaining for artist, min 5
-        
+        // Show album column when width >= 60, otherwise hide it
+        let show_album = area.width >= 60;
+
+        // Fixed overhead: borders(2) + prefix(2) + index(4) + spaces + duration(6)
+        // With album:    borders(2) + prefix(1) + index(4) + spaces(5) + duration(6) = 18
+        // Without album: borders(2) + prefix(1) + index(4) + spaces(4) + duration(6) = 17
+        let fixed_overhead = if show_album { 18 } else { 17 };
+        let available_width = area.width.saturating_sub(fixed_overhead) as usize;
+
+        let (title_width, artist_width, album_width) = if show_album {
+            let tw = (available_width * 2 / 5).max(8);
+            let aw = (available_width * 1 / 5).max(5);
+            let alw = available_width.saturating_sub(tw + aw).max(5);
+            (tw, aw, Some(alw))
+        } else {
+            let tw = (available_width * 3 / 5).max(10);
+            let aw = (available_width - tw).max(5);
+            (tw, aw, None)
+        };
+
         let items: Vec<ListItem> = self.app.filtered_indices
             .iter()
             .enumerate()
@@ -78,6 +91,9 @@ impl<'a> Widget for PlaylistWidget<'a> {
                 // Truncate and pad for proper alignment with dynamic widths
                 let title = Self::pad_to_width(&Self::truncate_to_width(&song.title, title_width), title_width);
                 let artist = Self::pad_to_width(&Self::truncate_to_width(&song.artist, artist_width), artist_width);
+                let album = album_width.map(|w| {
+                    Self::pad_to_width(&Self::truncate_to_width(&song.album, w), w)
+                });
                 
                 let duration = Self::format_duration(song.duration);
                 
@@ -99,17 +115,21 @@ impl<'a> Widget for PlaylistWidget<'a> {
                 } else {
                     Style::default()
                 };
-                
-                let line = Line::from(vec![
+
+                let mut spans = vec![
                     Span::styled(format!("{} ", prefix), Style::default().fg(Color::Green)),
                     Span::styled(format!("{} ", index_str), Style::default().fg(Color::DarkGray)),
                     Span::styled(format!("{} ", title), style),
                     Span::styled(format!("{} ", artist), Style::default().fg(Color::DarkGray)),
-                    Span::styled(duration, Style::default().fg(Color::Gray)),
-                ]);
+                ];
+                if let Some(album) = album {
+                    spans.push(Span::styled(format!("{} ", album), Style::default().fg(Color::DarkGray)));
+                }
+                spans.push(Span::styled(duration, Style::default().fg(Color::Gray)));
                 
-                ListItem::new(line).style(style)
+                (Line::from(spans), style)
             })
+            .map(|(line, style)| ListItem::new(line).style(style))
             .collect();
         
         let title = format!(" 歌曲列表 [{} 首] ", self.app.filtered_indices.len());

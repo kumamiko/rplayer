@@ -494,7 +494,7 @@ impl App {
         if self.current_song_index.is_some() {
             audio_player.toggle_pause();
             self.is_playing = !self.is_playing;
-            self.status_message = if self.is_playing { "Resumed" } else { "Paused" }.to_string();
+            self.status_message = if self.is_playing { "播放" } else { "暂停" }.to_string();
         }
     }
     
@@ -502,7 +502,7 @@ impl App {
         audio_player.stop();
         self.is_playing = false;
         self.current_pos = Duration::ZERO;
-        self.status_message = "Stopped".to_string();
+        self.status_message = "停止".to_string();
     }
     
     pub fn next_song(&mut self, audio_player: &mut AudioPlayer) {
@@ -679,16 +679,16 @@ fn parse_song(path: &str) -> Result<Song> {
                 .unwrap_or_else(|| file_path.file_stem().unwrap().to_str().unwrap_or("Unknown").to_string()),
             tag.artist()
                 .map(|s| s.to_string())
-                .unwrap_or_else(|| "Unknown Artist".to_string()),
+                .unwrap_or_else(|| "未知歌手".to_string()),
             tag.album()
                 .map(|s| s.to_string())
-                .unwrap_or_else(|| "Unknown Album".to_string()),
+                .unwrap_or_else(|| "未知专辑".to_string()),
         )
     } else {
         (
             file_path.file_stem().unwrap().to_str().unwrap_or("Unknown").to_string(),
-            "Unknown Artist".to_string(),
-            "Unknown Album".to_string(),
+            "未知歌手".to_string(),
+            "未知专辑".to_string(),
         )
     };
     

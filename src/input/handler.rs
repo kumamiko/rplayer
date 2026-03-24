@@ -56,7 +56,19 @@ impl InputHandler {
                 app.selected_index -= jump;
                 app.adjust_scroll();
             }
-            
+            KeyCode::Char('`') | KeyCode::Char('\'') => {
+                if let Some(song_idx) = app.current_song_index {
+                    if let Some(pos) = app.filtered_indices.iter().position(|&i| i == song_idx) {
+                        app.selected_index = pos;
+                        app.adjust_scroll();
+                    } else {
+                        app.set_status("当前歌曲不在显示列表中");
+                    }
+                } else {
+                    app.set_status("没有正在播放的歌曲");
+                }
+            }
+
             // Playback
             KeyCode::Enter => app.play_selected(audio_player),
             KeyCode::Char(' ') => app.toggle_pause(audio_player),
