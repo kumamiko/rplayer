@@ -59,23 +59,6 @@ cargo build --release
 ./target/release/rplayer
 ```
 
-### 交叉编译到 Windows
-
-需要安装 MinGW 工具链：
-
-```bash
-# Ubuntu/Debian
-sudo apt install mingw-w64
-
-# 添加 target
-rustup target add x86_64-pc-windows-gnu
-
-# 编译
-cargo build --target x86_64-pc-windows-gnu --release
-```
-
-产物：`target/x86_64-pc-windows-gnu/release/rplayer.exe`
-
 ## 使用方法
 
 ### 启动
