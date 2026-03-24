@@ -16,7 +16,7 @@ Powered by GLM-5
 - 多种播放模式（顺序/单曲循环/列表循环/随机）
 - 后台异步扫描，启动不阻塞界面
 - 增量扫描 + 缓存，二次启动秒开
-- 跨平台支持（Linux / Windows）
+- 跨平台支持（Linux / Windows/ Macos）
 - 播放位置记忆，退出后下次启动自动恢复（默认暂停状态）
 - 基于 symphonia 原生 seek 的高性能快进/快退（O(1) seek table）
 
@@ -73,8 +73,6 @@ rustup target add x86_64-pc-windows-gnu
 # 编译
 cargo build --target x86_64-pc-windows-gnu --release
 ```
-
-产物：`target/x86_64-pc-windows-gnu/release/rplayer.exe`
 
 ## 使用方法
 
@@ -145,7 +143,7 @@ cargo build --target x86_64-pc-windows-gnu --release
 | `Ctrl+F` | 切换搜索字段 |
 | `Esc` | 退出搜索（清除过滤） |
 | `Enter` | 确认搜索 |
-| `F` | 清除当前过滤 |
+| `F` | 清除当前过滤(Normal模式下) |
 
 搜索字段循环：歌曲/歌手 → 歌手 → 专辑 → 文件名 → 歌曲/歌手
 
@@ -161,7 +159,10 @@ cargo build --target x86_64-pc-windows-gnu --release
 
 ## 配置
 
-配置文件 `config.toml` 自动生成在可执行文件同目录下：
+配置文件 `config.toml` 
+
+windows自动生成在可执行文件同目录下
+linux, macos 自动生成在 `~/.rplayer/` 目录下
 
 ```toml
 music_folder = "/path/to/music"
@@ -189,7 +190,7 @@ last_position_secs = 0
 
 - 首次启动：全量扫描，解析所有文件元数据
 - 后续启动：加载缓存 → 后台增量扫描（仅解析新增/修改的文件）
-- 缓存文件存储在可执行文件同目录的 `cache/` 文件夹中
+- 缓存文件存储在 `cache/` 文件夹中
 - 通过文件修改时间（mtime）判断是否需要重新解析
 
 ## 技术栈
