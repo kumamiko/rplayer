@@ -157,7 +157,7 @@ impl InputHandler {
         match key.code {
             KeyCode::Char('y') | KeyCode::Char('Y') => {
                 app.mode = Mode::Normal;
-                app.scan_music_folder()?;
+                app.start_scan();
             }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
                 app.mode = Mode::Normal;

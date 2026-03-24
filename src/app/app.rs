@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::stdout;
 use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant, SystemTime};
 
 use super::{Mode, PlayMode, SearchMode};
@@ -40,6 +41,10 @@ pub struct App {
     // Status message
     pub status_message: String,
     pub status_expiry: Option<Instant>,
+    
+    // Background scanning
+    scanning: bool,
+    scan_rx: Option<Receiver<ScanMessage>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +89,20 @@ pub struct SongsCache {
     pub songs: Vec<Song>,
 }
 
+/// Messages from background scan thread
+#[derive(Debug)]
+enum ScanMessage {
+    /// Progress update with number of files found
+    Progress { found: usize },
+    /// Scan completed with results
+    Done {
+        songs: Vec<Song>,
+        cached_count: usize,
+        new_count: usize,
+        updated_count: usize,
+    },
+}
+
 impl Default for App {
     fn default() -> Self {
         Self {
@@ -103,6 +122,8 @@ impl Default for App {
             search_mode: SearchMode::default(),
             status_message: String::new(),
             status_expiry: None,
+            scanning: false,
+            scan_rx: None,
         }
     }
 }
@@ -114,12 +135,17 @@ impl App {
             config,
             ..Self::default()
         };
-        // Use command line arg if provided, save to config
         if let Some(dir) = music_dir {
             app.config.music_folder = dir;
             app.config.save()?;
         }
-        app.scan_music_folder()?;
+        // Load cache synchronously for instant display
+        let music_dir_str = app.get_music_dir_str();
+        if let Some(cache) = app.load_cache(&music_dir_str) {
+            app.songs = cache.songs;
+            app.filtered_indices = (0..app.songs.len()).collect();
+            app.status_message = format!("发现 {} 首歌曲", app.songs.len());
+        }
         Ok(app)
     }
     
@@ -157,7 +183,13 @@ impl App {
         let mut audio_player = AudioPlayer::new()?;
         let mut lyrics_manager = LyricsManager::new();
         
+        // Start background scan
+        self.start_scan();
+        
         while self.running {
+            // Poll background scan results
+            self.poll_scan();
+            
             // Draw UI
             terminal.draw(|f| {
                 let ui = Ui::new(self, &lyrics_manager);
@@ -205,31 +237,180 @@ impl App {
         Ok(())
     }
     
-    pub fn scan_music_folder(&mut self) -> Result<()> {
-        let music_dir = if self.config.music_folder.is_empty() {
-            dirs::audio_dir().unwrap_or_else(|| std::path::PathBuf::from("."))
+    fn get_music_dir(&self) -> PathBuf {
+        if self.config.music_folder.is_empty() {
+            dirs::audio_dir().unwrap_or_else(|| PathBuf::from("."))
         } else {
-            std::path::PathBuf::from(&self.config.music_folder)
-        };
-        
-        let music_dir_str = music_dir.to_str().unwrap_or(".").to_string();
-        
-        // Try to load cache
-        let cache = self.load_cache(&music_dir_str);
-        
-        if let Some(ref cached) = cache {
-            // Incremental update
-            self.incremental_scan(music_dir, cached)?;
-        } else {
-            // Full scan
-            self.full_scan(music_dir)?;
+            PathBuf::from(&self.config.music_folder)
+        }
+    }
+    
+    fn get_music_dir_str(&self) -> String {
+        self.get_music_dir().to_str().unwrap_or(".").to_string()
+    }
+    
+    /// Start background scanning in a separate thread
+    pub fn start_scan(&mut self) {
+        if self.scanning {
+            return;
         }
         
-        // Save cache after scanning
-        self.save_cache(&music_dir_str)?;
+        let music_dir = self.get_music_dir();
+        let music_dir_str = self.get_music_dir_str();
+        let cache = self.load_cache(&music_dir_str);
         
-        self.status_message = format!("发现 {} 首歌曲", self.songs.len());
-        Ok(())
+        let (tx, rx) = mpsc::channel();
+        self.scanning = true;
+        self.scan_rx = Some(rx);
+        self.status_message = "正在扫描媒体库...".to_string();
+        self.status_expiry = None;
+        
+        std::thread::spawn(move || {
+            Self::background_scan(music_dir, cache, tx);
+        });
+    }
+    
+    /// Poll for background scan results
+    fn poll_scan(&mut self) {
+        if !self.scanning {
+            return;
+        }
+        let Some(rx) = self.scan_rx.take() else { return };
+        
+        while let Ok(msg) = rx.try_recv() {
+            match msg {
+                ScanMessage::Progress { found } => {
+                    self.status_message = format!("正在扫描媒体库... 已发现 {} 首", found);
+                    self.status_expiry = None;
+                }
+                ScanMessage::Done { songs, cached_count, new_count, updated_count } => {
+                    // Preserve currently playing song
+                    let playing_path = self.current_song_index
+                        .and_then(|idx| self.songs.get(idx))
+                        .map(|s| s.path.clone());
+                    
+                    self.songs = songs;
+                    self.filtered_indices = (0..self.songs.len()).collect();
+                    
+                    // Restore current song index
+                    if let Some(ref path) = playing_path {
+                        self.current_song_index = self.songs.iter().position(|s| s.path == *path);
+                    }
+                    
+                    if self.selected_index >= self.filtered_indices.len() {
+                        self.selected_index = 0;
+                        self.scroll_offset = 0;
+                    }
+                    
+                    self.scanning = false;
+                    // rx dropped here (scan_rx stays None)
+                    
+                    // Save cache
+                    let music_dir_str = self.get_music_dir_str();
+                    let _ = self.save_cache(&music_dir_str);
+                    
+                    if new_count > 0 || updated_count > 0 {
+                        self.status_message = format!(
+                            "扫描完成: {} 首 (缓存: {} | 新增: {} | 更新: {})",
+                            self.songs.len(), cached_count, new_count, updated_count
+                        );
+                    } else {
+                        self.status_message = format!("扫描完成: {} 首歌曲", self.songs.len());
+                    }
+                    return;
+                }
+            }
+        }
+        
+        // Still scanning, put receiver back
+        self.scan_rx = Some(rx);
+    }
+    
+    /// Background scan thread function
+    fn background_scan(music_dir: PathBuf, cache: Option<SongsCache>, tx: Sender<ScanMessage>) {
+        use rayon::prelude::*;
+        use walkdir::WalkDir;
+        
+        let extensions = ["mp3", "flac", "wav", "ogg", "m4a", "aac"];
+        
+        // Phase 1: Collect all music file paths and mtimes
+        let file_entries: Vec<(String, u64)> = WalkDir::new(&music_dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter_map(|entry| {
+                let path = entry.path();
+                let ext = path.extension()?.to_str()?.to_lowercase();
+                if extensions.contains(&ext.as_str()) {
+                    let path_str = path.to_str()?.to_string();
+                    let mtime = get_file_mtime(path);
+                    Some((path_str, mtime))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        let _ = tx.send(ScanMessage::Progress { found: file_entries.len() });
+        
+        // Phase 2: Determine which files need parsing
+        let cached_map: HashMap<String, Song> = match &cache {
+            Some(c) => c.songs.iter().map(|s| (s.path.clone(), s.clone())).collect(),
+            None => HashMap::new(),
+        };
+        
+        let mut to_parse_new = Vec::new();
+        let mut to_parse_updated = Vec::new();
+        let mut cached_count = 0usize;
+        
+        for (path, mtime) in &file_entries {
+            match cached_map.get(path.as_str()) {
+                Some(cached) if cached.mtime == *mtime => {
+                    cached_count += 1;
+                }
+                Some(_) => {
+                    to_parse_updated.push(path.clone());
+                }
+                None => {
+                    to_parse_new.push(path.clone());
+                }
+            }
+        }
+        
+        // Phase 3: Parse new files in parallel using rayon
+        let parsed_new: HashMap<String, Song> = to_parse_new
+            .par_iter()
+            .filter_map(|path| parse_song(path).ok().map(|song| (path.clone(), song)))
+            .collect();
+        
+        // Phase 3b: Parse updated files in parallel
+        let parsed_updated: HashMap<String, Song> = to_parse_updated
+            .par_iter()
+            .filter_map(|path| parse_song(path).ok().map(|song| (path.clone(), song)))
+            .collect();
+        
+        let new_count = parsed_new.len();
+        let updated_count = parsed_updated.len();
+        
+        // Merge parsed results
+        let mut parsed_map: HashMap<String, Song> = parsed_new;
+        parsed_map.extend(parsed_updated);
+        
+        // Phase 4: Build final song list preserving directory walk order
+        let songs: Vec<Song> = file_entries
+            .into_iter()
+            .filter_map(|(path, _)| {
+                cached_map.get(&path)
+                    .cloned()
+                    .or_else(|| parsed_map.get(&path).cloned())
+            })
+            .collect();
+        
+        let _ = tx.send(ScanMessage::Done {
+            songs,
+            cached_count,
+            new_count,
+            updated_count,
+        });
     }
     
     /// Get cache file path (unique per music folder)
@@ -282,143 +463,6 @@ impl App {
         let content = serde_json::to_string_pretty(&cache)?;
         std::fs::write(path, content)?;
         Ok(())
-    }
-    
-    /// Full scan - parse all files
-    fn full_scan(&mut self, music_dir: PathBuf) -> Result<()> {
-        use walkdir::WalkDir;
-        
-        let extensions = ["mp3", "flac", "wav", "ogg", "m4a", "aac"];
-        
-        self.songs.clear();
-        self.filtered_indices.clear();
-        
-        for entry in WalkDir::new(music_dir).into_iter().filter_map(|e| e.ok()) {
-            let path = entry.path();
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if extensions.contains(&ext.to_lowercase().as_str()) {
-                    if let Ok(song) = self.parse_song(path) {
-                        self.filtered_indices.push(self.songs.len());
-                        self.songs.push(song);
-                    }
-                }
-            }
-        }
-        
-        Ok(())
-    }
-    
-    /// Incremental scan - only scan changed files
-    fn incremental_scan(&mut self, music_dir: PathBuf, cached: &SongsCache) -> Result<()> {
-        use walkdir::WalkDir;
-        
-        let extensions = ["mp3", "flac", "wav", "ogg", "m4a", "aac"];
-        
-        // Build a map from path to cached song for fast lookup
-        let cached_map: HashMap<String, &Song> = cached.songs.iter()
-            .map(|s| (s.path.clone(), s))
-            .collect();
-        
-        self.songs.clear();
-        self.filtered_indices.clear();
-        
-        let mut new_count = 0;
-        let mut updated_count = 0;
-        let mut cached_count = 0;
-        
-        for entry in WalkDir::new(music_dir).into_iter().filter_map(|e| e.ok()) {
-            let path = entry.path();
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if extensions.contains(&ext.to_lowercase().as_str()) {
-                    let path_str = path.to_str().unwrap_or("").to_string();
-                    
-                    // Get current file mtime
-                    let current_mtime = self.get_file_mtime(path);
-                    
-                    // Check if we have cached data
-                    if let Some(&cached_song) = cached_map.get(&path_str) {
-                        if cached_song.mtime == current_mtime {
-                            // File unchanged, use cached data
-                            self.filtered_indices.push(self.songs.len());
-                            self.songs.push(cached_song.clone());
-                            cached_count += 1;
-                            continue;
-                        } else {
-                            // File modified, re-parse
-                            updated_count += 1;
-                        }
-                    } else {
-                        // New file
-                        new_count += 1;
-                    }
-                    
-                    // Parse new or modified file
-                    if let Ok(song) = self.parse_song(path) {
-                        self.filtered_indices.push(self.songs.len());
-                        self.songs.push(song);
-                    }
-                }
-            }
-        }
-        
-        if new_count > 0 || updated_count > 0 {
-            self.status_message = format!(
-                "缓存: {} 首 | 新增: {} | 更新: {}",
-                cached_count, new_count, updated_count
-            );
-        }
-        
-        Ok(())
-    }
-    
-    /// Get file modification time as unix timestamp
-    fn get_file_mtime(&self, path: &std::path::Path) -> u64 {
-        path.metadata()
-            .and_then(|m| m.modified())
-            .map(|t| t.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_secs())
-            .unwrap_or(0)
-    }
-    
-    fn parse_song(&self, path: &std::path::Path) -> Result<Song> {
-        use lofty::probe::Probe;
-        use lofty::file::{TaggedFileExt, AudioFile};
-        use lofty::tag::Accessor;
-        
-        let tagged_file = Probe::open(path)?.read()?;
-        let tag = tagged_file.primary_tag();
-        let properties = tagged_file.properties();
-        
-        let duration = properties.duration();
-        let mtime = self.get_file_mtime(path);
-        
-        let (title, artist, album) = if let Some(tag) = tag {
-            (
-                tag.title()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| path.file_stem().unwrap().to_str().unwrap_or("Unknown").to_string()),
-                tag.artist()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "Unknown Artist".to_string()),
-                tag.album()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "Unknown Album".to_string()),
-            )
-        } else {
-            (
-                path.file_stem().unwrap().to_str().unwrap_or("Unknown").to_string(),
-                "Unknown Artist".to_string(),
-                "Unknown Album".to_string(),
-            )
-        };
-        
-        Ok(Song {
-            path: path.to_str().unwrap_or("").to_string(),
-            title,
-            artist,
-            album,
-            duration,
-            mtime,
-        })
     }
     
     pub fn play_selected(&mut self, audio_player: &mut AudioPlayer) {
@@ -604,4 +648,56 @@ impl App {
     pub fn quit(&mut self) {
         self.running = false;
     }
+}
+
+/// Get file modification time as unix timestamp
+fn get_file_mtime(path: &std::path::Path) -> u64 {
+    path.metadata()
+        .and_then(|m| m.modified())
+        .map(|t| t.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_secs())
+        .unwrap_or(0)
+}
+
+/// Parse a song file's metadata
+fn parse_song(path: &str) -> Result<Song> {
+    use lofty::probe::Probe;
+    use lofty::file::{TaggedFileExt, AudioFile};
+    use lofty::tag::Accessor;
+    
+    let file_path = std::path::Path::new(path);
+    let tagged_file = Probe::open(file_path)?.read()?;
+    let tag = tagged_file.primary_tag();
+    let properties = tagged_file.properties();
+    
+    let duration = properties.duration();
+    let mtime = get_file_mtime(file_path);
+    
+    let (title, artist, album) = if let Some(tag) = tag {
+        (
+            tag.title()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| file_path.file_stem().unwrap().to_str().unwrap_or("Unknown").to_string()),
+            tag.artist()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "Unknown Artist".to_string()),
+            tag.album()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "Unknown Album".to_string()),
+        )
+    } else {
+        (
+            file_path.file_stem().unwrap().to_str().unwrap_or("Unknown").to_string(),
+            "Unknown Artist".to_string(),
+            "Unknown Album".to_string(),
+        )
+    };
+    
+    Ok(Song {
+        path: path.to_string(),
+        title,
+        artist,
+        album,
+        duration,
+        mtime,
+    })
 }
