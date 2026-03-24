@@ -1,0 +1,103 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            ext: ""
+            package: libasound2-dev
+            archive: tar.gz
+            cross: false
+
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ext: ".exe"
+            archive: zip
+            cross: false
+          - os: windows-latest
+            target: x86_64-pc-windows-gnu
+            ext: ".exe"
+            archive: zip
+            cross: false
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            ext: ".exe"
+            archive: zip
+            cross: false
+
+          # macOS
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            ext: ""
+            archive: tar.gz
+            cross: false
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            ext: ""
+            archive: tar.gz
+            cross: false
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Linux 依赖安装（仅原有逻辑）
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.package }}
+        shell: bash
+
+      # 安装 Rust 工具链
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # 构建逻辑（兼容所有架构）
+      - name: Build
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+        shell: bash
+
+      # 拆分打包逻辑：Windows（含ARM）用PowerShell原生命令，避免zip依赖
+      - name: Package binary (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $BIN_NAME = "${{ github.event.repository.name }}"
+          $TARGET_BIN = "target/${{ matrix.target }}/release/${BIN_NAME}${{ matrix.ext }}"
+          $ARCHIVE_NAME = "${BIN_NAME}-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}"
+          # PowerShell 原生打包，兼容所有 Windows 架构
+          Compress-Archive -Path $TARGET_BIN -DestinationPath $ARCHIVE_NAME -Force
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # Linux/macOS 保留原有tar.gz打包逻辑
+      - name: Package binary (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          BIN_NAME="${{ github.event.repository.name }}"
+          TARGET_BIN="target/${{ matrix.target }}/release/${BIN_NAME}${{ matrix.ext }}"
+          ARCHIVE_NAME="${BIN_NAME}-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}"
+          tar -czf "$ARCHIVE_NAME" -C "$(dirname "$TARGET_BIN")" "$(basename "$TARGET_BIN")"
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+
+      # 上传 Release 包（兼容所有架构产物）
+      - uses: softprops/action-gh-release@v2
+        env:
+          ARCHIVE_NAME: ${{ env.ARCHIVE_NAME }}
+        with:
+          files: ${{ env.ARCHIVE_NAME }}
