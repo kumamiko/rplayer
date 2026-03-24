@@ -175,7 +175,7 @@ impl InputHandler {
                 app.filtered_indices = (0..app.songs.len()).collect();
                 app.selected_index = 0;
                 app.scroll_offset = 0;
-                app.set_status("已清除过滤");
+                app.set_status("已清除搜索");
             }
             
             // Toggle play mode

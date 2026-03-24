@@ -25,7 +25,7 @@ impl Widget for HelpWidget {
                 .add_modifier(Modifier::BOLD))),
             Line::from(""),
             Line::from(vec![
-                Span::styled("  j/k, ↑/↓    ", Style::default().fg(Color::Yellow)),
+                Span::styled("  j/k, ↑/↓     ", Style::default().fg(Color::Yellow)),
                 Span::raw("上下移动"),
             ]),
             Line::from(vec![
