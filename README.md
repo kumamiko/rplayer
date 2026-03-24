@@ -15,10 +15,27 @@
 - 后台异步扫描，启动不阻塞界面
 - 增量扫描 + 缓存，二次启动秒开
 - 跨平台支持（Linux / Windows）
+- 播放位置记忆，退出后下次启动自动恢复（默认暂停状态）
+- 基于 symphonia 原生 seek 的高性能快进/快退（O(1) seek table）
 
 ## 截图
 
-界面布局：左侧歌曲列表，右侧歌词显示，底部状态栏。
+界面布局：
+
+```
+┌─────────────────────────────────────────┐
+│                                         │
+│           播放列表 (Playlist)            │  ← 自适应高度 (Min 5)
+│                                         │
+│                                         │
+├─────────────────────────────────────────┤
+│           歌词 (Lyrics)                 │  ← 固定 4 行高
+├─────────────────────────────────────────┤
+│           消息栏 (Message)              │  ← 固定 1 行高
+├─────────────────────────────────────────┤
+│           状态栏 (Statusbar)             │  ← 固定 1 行高
+└─────────────────────────────────────────┘
+```
 
 ## 安装
 
@@ -84,7 +101,6 @@ cargo build --target x86_64-pc-windows-gnu --release
 | `d` / `PgDn` / `→` | 向下翻页 |
 | `u` / `PgUp` / `←` | 向上翻页 |
 | `g` | 跳到顶部 |
-| `数字+g` | 跳到指定序号行 |
 | `G` | 跳到底部 |
 | `` ` `` / `'` | 跳到当前播放歌曲 |
 
@@ -151,21 +167,23 @@ cargo build --target x86_64-pc-windows-gnu --release
 
 ```toml
 music_folder = "/path/to/music"
+# 以下字段由程序自动维护，无需手动编辑
+last_song_path = ""
+last_position_secs = 0
 ```
+
+## 播放恢复
+
+程序退出时自动保存当前播放的歌曲路径和播放进度（秒），下次启动时：
+
+- 自动定位到上次播放的歌曲并恢复位置
+- 默认以暂停状态恢复，不会自动播放
+- 如果上次播放的歌曲已被删除，则忽略恢复
 
 ## 歌词
 
 将 LRC 格式歌词文件放在音乐文件同目录下，文件名与音乐文件相同即可自动加载。
 
-LRC 格式示例：
-
-```
-[ti:歌曲标题]
-[ar:歌手]
-[00:12.00]第一行歌词
-[00:17.20]第二行歌词
-[01:23.45]第三行歌词
-```
 
 ## 缓存机制
 
@@ -181,7 +199,7 @@ LRC 格式示例：
 | 组件 | 技术 |
 |------|------|
 | TUI 框架 | [ratatui](https://github.com/ratatui/ratatui) + [crossterm](https://github.com/crossterm-rs/crossterm) |
-| 音频解码 | [rodio](https://github.com/RustAudio/rodio) (symphonia) |
+| 音频解码 | [rodio](https://github.com/RustAudio/rodio) + [symphonia](https://github.com/pdeljanov/Symphonia) |
 | 元数据解析 | [lofty](https://github.com/Serial-ATA/lofty) |
 | 并行处理 | [rayon](https://github.com/rayon-rs/rayon) |
 | 命令行解析 | [clap](https://github.com/clap-rs/clap) |
