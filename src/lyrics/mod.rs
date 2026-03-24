@@ -30,15 +30,53 @@ impl LyricsManager {
             return;
         }
         
-        self.lyrics.clear();
+        let new_lyrics = self.load_lyrics(song_path);
+        self.lyrics = new_lyrics;
         self.loaded_path = Some(song_path.to_string());
-        
-        // Try to find .lrc file (same name as song but with .lrc extension)
+    }
+    
+    fn load_lyrics(&self, song_path: &str) -> BTreeMap<Duration, String> {
+        // 1. Try external .lrc file first
         let lrc_path = format!("{}.lrc", song_path.rsplit_once('.').map(|(p, _)| p).unwrap_or(song_path));
         
         if let Ok(content) = std::fs::read_to_string(&lrc_path) {
-            self.lyrics = parse_lrc(&content);
+            let lyrics = parse_lrc(&content);
+            if !lyrics.is_empty() {
+                return lyrics;
+            }
         }
+        
+        // 2. Try embedded lyrics from audio file (must be LRC format)
+        if let Some(embedded) = self.load_embedded_lyrics(song_path) {
+            let lyrics = parse_lrc(&embedded);
+            if !lyrics.is_empty() {
+                return lyrics;
+            }
+        }
+        
+        // 3. No lyrics available
+        BTreeMap::new()
+    }
+    
+    fn load_embedded_lyrics(&self, song_path: &str) -> Option<String> {
+        use lofty::probe::Probe;
+        use lofty::file::TaggedFileExt;
+        use lofty::tag::{ItemKey, ItemValue};
+        
+        let path = std::path::Path::new(song_path);
+        let tagged_file = Probe::open(path).ok()?.read().ok()?;
+        let tag = tagged_file.primary_tag()?;
+        
+        // Look for lyrics in tag items (ItemKey::Lyrics covers USLT, ©lyr, LYRICS, etc.)
+        for item in tag.items() {
+            if *item.key() == ItemKey::Lyrics {
+                if let ItemValue::Text(text) = item.value() {
+                    return Some(text.clone());
+                }
+            }
+        }
+        
+        None
     }
     
     /// Get current and next lyrics line for karaoke display

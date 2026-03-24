@@ -49,6 +49,14 @@ impl<'a> Widget for LyricsWidget<'a> {
                     Line::raw("")
                 },
             ]
+        } else if let Some(next) = next_line {
+            // Before lyrics start (intro) - show upcoming line dimmed
+            vec![
+                Line::from(vec![
+                    Span::styled("♪ ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(next, Style::default().fg(Color::DarkGray)),
+                ]),
+            ]
         } else {
             vec![
                 Line::from(Span::styled(
