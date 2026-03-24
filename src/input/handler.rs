@@ -44,17 +44,28 @@ impl InputHandler {
             }
             KeyCode::Char('G') => {
                 app.selected_index = app.filtered_indices.len().saturating_sub(1);
-                app.scroll_offset = app.selected_index.saturating_sub(5);
+                app.scroll_offset = app.selected_index.saturating_sub(app.playlist_visible_height.saturating_sub(1));
             }
             KeyCode::PageDown | KeyCode::Right | KeyCode::Char('d') => {
-                let jump = 10.min(app.filtered_indices.len().saturating_sub(app.selected_index + 1));
-                app.selected_index += jump;
-                app.adjust_scroll();
+                let visible = app.playlist_visible_height.max(1);
+                let remaining = app.filtered_indices.len().saturating_sub(app.selected_index + 1);
+                let jump = visible.min(remaining);
+                if jump > 0 {
+                    let relative = app.selected_index - app.scroll_offset;
+                    app.selected_index += jump;
+                    app.scroll_offset = app.selected_index.saturating_sub(relative);
+                    let max_scroll = app.filtered_indices.len().saturating_sub(visible);
+                    app.scroll_offset = app.scroll_offset.min(max_scroll);
+                }
             }
             KeyCode::PageUp | KeyCode::Left | KeyCode::Char('u') => {
-                let jump = 10.min(app.selected_index);
-                app.selected_index -= jump;
-                app.adjust_scroll();
+                let visible = app.playlist_visible_height.max(1);
+                let jump = visible.min(app.selected_index);
+                if jump > 0 {
+                    let relative = app.selected_index - app.scroll_offset;
+                    app.selected_index -= jump;
+                    app.scroll_offset = app.selected_index.saturating_sub(relative);
+                }
             }
             KeyCode::Char('`') | KeyCode::Char('\'') => {
                 if let Some(song_idx) = app.current_song_index {

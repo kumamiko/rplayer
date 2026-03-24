@@ -26,6 +26,7 @@ pub struct App {
     pub filtered_indices: Vec<usize>,
     pub selected_index: usize,
     pub scroll_offset: usize,
+    pub playlist_visible_height: usize,
     
     // Playback
     pub current_song_index: Option<usize>,
@@ -114,6 +115,7 @@ impl Default for App {
             filtered_indices: Vec::new(),
             selected_index: 0,
             scroll_offset: 0,
+            playlist_visible_height: 10,
             current_song_index: None,
             is_playing: false,
             current_pos: Duration::ZERO,
@@ -194,7 +196,7 @@ impl App {
             
             // Draw UI
             terminal.draw(|f| {
-                let ui = Ui::new(self, &lyrics_manager);
+                let mut ui = Ui::new(self, &lyrics_manager);
                 ui.render(f);
             })?;
             
@@ -595,7 +597,7 @@ impl App {
     }
     
     pub fn adjust_scroll(&mut self) {
-        let visible_height = 10; // Will be updated dynamically
+        let visible_height = self.playlist_visible_height.max(1);
         if self.selected_index < self.scroll_offset {
             self.scroll_offset = self.selected_index;
         } else if self.selected_index >= self.scroll_offset + visible_height {

@@ -18,17 +18,20 @@ use crate::lyrics::LyricsManager;
 use ratatui::Frame;
 
 pub struct Ui<'a> {
-    app: &'a App,
+    app: &'a mut App,
     lyrics: &'a LyricsManager,
 }
 
 impl<'a> Ui<'a> {
-    pub fn new(app: &'a App, lyrics: &'a LyricsManager) -> Self {
+    pub fn new(app: &'a mut App, lyrics: &'a LyricsManager) -> Self {
         Self { app, lyrics }
     }
-    
-    pub fn render(&self, f: &mut Frame) {
+
+    pub fn render(&mut self, f: &mut Frame) {
         let chunks = layout::create_layout(f.area());
+
+        // Update visible height for dynamic scroll/page
+        self.app.playlist_visible_height = chunks.playlist.height.saturating_sub(2) as usize;
         
         // Playlist (left side)
         let playlist = PlaylistWidget::new(self.app);

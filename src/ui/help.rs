@@ -38,11 +38,11 @@ impl Widget for HelpWidget {
             ]),
             Line::from(vec![
                 Span::styled("  PageUp/Down  ", Style::default().fg(Color::Yellow)),
-                Span::raw("翻页"),
+                Span::raw("上/下翻页"),
             ]),
             Line::from(vec![
                 Span::styled("  ←/→          ", Style::default().fg(Color::Yellow)),
-                Span::raw("翻页"),
+                Span::raw("上/下翻页"),
             ]),
             Line::from(vec![
                 Span::styled("  u/d          ", Style::default().fg(Color::Yellow)),
