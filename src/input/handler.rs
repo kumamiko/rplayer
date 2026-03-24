@@ -41,6 +41,23 @@ impl InputHandler {
             }
         }
 
+        // Backspace: delete last digit from count
+        if key.code == KeyCode::Backspace {
+            if app.count.is_some() {
+                app.count = match app.count.unwrap() / 10 {
+                    0 => None,
+                    v => Some(v),
+                };
+                if let Some(c) = app.count {
+                    app.status_message = format!("{}", c);
+                } else {
+                    app.status_message.clear();
+                }
+                app.status_expiry = None;
+                return Ok(());
+            }
+        }
+
         match key.code {
             // Quit
             KeyCode::Char('q') => app.quit(),
@@ -88,9 +105,10 @@ impl InputHandler {
                 app.scroll_offset = app.selected_index.saturating_sub(app.playlist_visible_height.saturating_sub(1));
             }
             KeyCode::PageDown | KeyCode::Right | KeyCode::Char('d') => {
+                let count = app.consume_count();
                 let visible = app.playlist_visible_height.max(1);
                 let remaining = app.filtered_indices.len().saturating_sub(app.selected_index + 1);
-                let jump = visible.min(remaining);
+                let jump = (visible * count).min(remaining);
                 if jump > 0 {
                     let relative = app.selected_index - app.scroll_offset;
                     app.selected_index += jump;
@@ -100,8 +118,9 @@ impl InputHandler {
                 }
             }
             KeyCode::PageUp | KeyCode::Left | KeyCode::Char('u') => {
+                let count = app.consume_count();
                 let visible = app.playlist_visible_height.max(1);
-                let jump = visible.min(app.selected_index);
+                let jump = (visible * count).min(app.selected_index);
                 if jump > 0 {
                     let relative = app.selected_index - app.scroll_offset;
                     app.selected_index -= jump;
@@ -181,11 +200,15 @@ impl InputHandler {
                 app.mode = Mode::Help;
             }
             
-            _ => {
-                app.count = None;
-            }
+            _ => {}
         }
-        
+
+        // Clear count and its status display for any non-count key
+        if app.count.is_some() && app.status_expiry.is_none() {
+            app.count = None;
+            app.status_message.clear();
+        }
+
         Ok(())
     }
     
