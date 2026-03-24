@@ -109,7 +109,9 @@ impl AudioPlayer {
                 // Adjust start time to account for pause duration
                 if let Some(paused) = self.paused_at {
                     if let Some(start) = self.start_time.as_mut() {
-                        *start = Instant::now() - paused;
+                        if let Some(new_start) = Instant::now().checked_sub(paused) {
+                            *start = new_start;
+                        }
                     }
                 }
             } else {
@@ -211,7 +213,7 @@ impl AudioPlayer {
         }
 
         self.sink = Some(sink);
-        self.start_time = Some(Instant::now() - pos);
+        self.start_time = Instant::now().checked_sub(pos);
         self.paused_at = if self.is_paused { Some(pos) } else { None };
         
         Ok(())
