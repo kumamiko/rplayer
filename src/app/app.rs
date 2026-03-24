@@ -345,7 +345,7 @@ impl App {
         use rayon::prelude::*;
         use walkdir::WalkDir;
         
-        let extensions = ["mp3", "flac", "wav", "ogg", "m4a", "aac"];
+        let extensions = ["mp3", "flac", "wav", "ogg", "aac"];
         
         // Phase 1: Collect all music file paths and mtimes
         let file_entries: Vec<(String, u64)> = WalkDir::new(&music_dir)
@@ -428,23 +428,31 @@ impl App {
     }
     
     /// Get cache file path (unique per music folder)
+    /// Windows: <exe_dir>/cache/
+    /// Other platforms: ~/.rplayer/cache/
     fn cache_path(music_folder: &str) -> PathBuf {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         music_folder.hash(&mut hasher);
         let hash = hasher.finish();
-        
+
+        #[cfg(not(target_os = "windows"))]
+        let cache_dir = {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            std::path::Path::new(&home).join(".rplayer").join("cache")
+        };
+        #[cfg(target_os = "windows")]
         let cache_dir = std::env::current_exe()
             .ok()
             .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
             .unwrap_or_else(|| PathBuf::from("."))
             .join("cache");
-        
+
         // Create cache directory if not exists
         let _ = std::fs::create_dir_all(&cache_dir);
-        
+
         cache_dir.join(format!("songs_cache_{:016x}.json", hash))
     }
     

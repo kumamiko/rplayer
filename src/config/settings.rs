@@ -25,13 +25,25 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Get config file path (same directory as executable)
+    /// Get config file path
+    /// Windows: same directory as executable
+    /// Other platforms: ~/.rplayer/
     fn config_path() -> PathBuf {
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("config.toml")
+        #[cfg(not(target_os = "windows"))]
+        {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            let dir = std::path::Path::new(&home).join(".rplayer");
+            let _ = std::fs::create_dir_all(&dir);
+            dir.join("config.toml")
+        }
+        #[cfg(target_os = "windows")]
+        {
+            std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("config.toml")
+        }
     }
     
     /// Load config from file, create default if not exists

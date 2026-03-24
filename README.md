@@ -7,7 +7,7 @@ Powered by GLM-5
 ## 功能特性
 
 - 本地音乐播放，自动扫描媒体库
-- 支持 MP3、FLAC、WAV、OGG、M4A、AAC 格式
+- 支持 MP3、FLAC、WAV、OGG、AAC 格式
 - LRC 歌词同步显示
 - Vim 风格快捷键操作
 - 多列播放列表（序号、歌名、歌手、专辑、时长，窄屏自动隐藏专辑列）
@@ -58,6 +58,23 @@ cargo build --release
 # 运行
 ./target/release/rplayer
 ```
+
+### 交叉编译到 Windows
+
+需要安装 MinGW 工具链：
+
+```bash
+# Ubuntu/Debian
+sudo apt install mingw-w64
+
+# 添加 target
+rustup target add x86_64-pc-windows-gnu
+
+# 编译
+cargo build --target x86_64-pc-windows-gnu --release
+```
+
+产物：`target/x86_64-pc-windows-gnu/release/rplayer.exe`
 
 ## 使用方法
 
