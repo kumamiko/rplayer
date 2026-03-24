@@ -20,29 +20,70 @@ impl InputHandler {
     }
     
     fn handle_normal(&self, app: &mut App, audio_player: &mut AudioPlayer, key: KeyEvent) -> Result<()> {
+        // Accumulate digit prefix (vim count)
+        if let KeyCode::Char(c) = key.code {
+            if c.is_ascii_digit() && c != '0' || app.count.is_some() && c.is_ascii_digit() {
+                let n = c.to_digit(10).unwrap() as usize;
+                app.count = Some(app.count.unwrap_or(0) * 10 + n);
+                app.status_message = format!("{}", app.count.unwrap());
+                app.status_expiry = None;
+                return Ok(());
+            }
+        }
+
+        // Digit 0 with no preceding count acts as... ignore (or could be mapped later)
+        // Esc cancels count
+        if key.code == KeyCode::Esc {
+            if app.count.is_some() {
+                app.count = None;
+                app.status_message.clear();
+                return Ok(());
+            }
+        }
+
         match key.code {
             // Quit
             KeyCode::Char('q') => app.quit(),
             KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => app.quit(),
-            
-            // Navigation (Vim style)
-            KeyCode::Char('j') | KeyCode::Down => app.move_down(),
-            KeyCode::Char('k') | KeyCode::Up => app.move_up(),
+
+            // Navigation (Vim style with count)
+            KeyCode::Char('j') | KeyCode::Down => {
+                let count = app.consume_count();
+                if count > 1 {
+                    app.move_down_by(count);
+                } else {
+                    app.move_down();
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                let count = app.consume_count();
+                if count > 1 {
+                    app.move_up_by(count);
+                } else {
+                    app.move_up();
+                }
+            }
             KeyCode::Char('h') => {
-                // Seek backward 10 seconds
+                app.count = None;
                 audio_player.seek_relative(false, 10)?;
                 app.set_status("⏪ -10秒");
             }
             KeyCode::Char('l') => {
-                // Seek forward 10 seconds
+                app.count = None;
                 audio_player.seek_relative(true, 10)?;
                 app.set_status("⏩ +10秒");
             }
             KeyCode::Char('g') => {
-                app.selected_index = 0;
-                app.scroll_offset = 0;
+                let count = app.consume_count();
+                if count > 1 {
+                    app.goto_line(count);
+                } else {
+                    app.selected_index = 0;
+                    app.scroll_offset = 0;
+                }
             }
             KeyCode::Char('G') => {
+                app.count = None;
                 app.selected_index = app.filtered_indices.len().saturating_sub(1);
                 app.scroll_offset = app.selected_index.saturating_sub(app.playlist_visible_height.saturating_sub(1));
             }
@@ -140,7 +181,9 @@ impl InputHandler {
                 app.mode = Mode::Help;
             }
             
-            _ => {}
+            _ => {
+                app.count = None;
+            }
         }
         
         Ok(())
@@ -170,7 +213,9 @@ impl InputHandler {
             KeyCode::Char(c) => {
                 app.search_query.push(c);
             }
-            _ => {}
+            _ => {
+                app.count = None;
+            }
         }
         
         // Live filter (only if still in search mode)
@@ -191,7 +236,9 @@ impl InputHandler {
                 app.mode = Mode::Normal;
                 app.set_status("已取消");
             }
-            _ => {}
+            _ => {
+                app.count = None;
+            }
         }
         Ok(())
     }

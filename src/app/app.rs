@@ -43,6 +43,9 @@ pub struct App {
     // Status message
     pub status_message: String,
     pub status_expiry: Option<Instant>,
+
+    // Count prefix (vim-style, e.g. 5j, 10g)
+    pub count: Option<usize>,
     
     // Background scanning
     scanning: bool,
@@ -126,6 +129,7 @@ impl Default for App {
             sort_mode: SortMode::default(),
             status_message: String::new(),
             status_expiry: None,
+            count: None,
             scanning: false,
             scan_rx: None,
         }
@@ -588,6 +592,41 @@ impl App {
             self.adjust_scroll();
         }
     }
+
+    pub fn move_up_by(&mut self, count: usize) {
+        if self.filtered_indices.is_empty() {
+            return;
+        }
+        let jump = count.min(self.selected_index);
+        self.selected_index -= jump;
+        self.adjust_scroll();
+    }
+
+    pub fn move_down_by(&mut self, count: usize) {
+        if self.filtered_indices.is_empty() {
+            return;
+        }
+        let jump = count.min(self.filtered_indices.len().saturating_sub(self.selected_index + 1));
+        self.selected_index += jump;
+        self.adjust_scroll();
+    }
+
+    pub fn goto_line(&mut self, line: usize) {
+        if self.filtered_indices.is_empty() {
+            return;
+        }
+        let target = (line - 1).min(self.filtered_indices.len() - 1);
+        self.selected_index = target;
+        self.adjust_scroll();
+    }
+
+    pub fn consume_count(&mut self) -> usize {
+        let count = self.count.take().unwrap_or(1);
+        if self.count.is_none() && self.status_expiry.is_none() {
+            self.status_message.clear();
+        }
+        count
+    }
     
     pub fn move_down(&mut self) {
         if !self.filtered_indices.is_empty() && self.selected_index < self.filtered_indices.len() - 1 {
@@ -656,7 +695,12 @@ impl App {
             let sb = &songs[b];
             match sort_mode {
                 SortMode::Filename => {
-                    sa.path.cmp(&sb.path)
+                    let cmp = sa.title.to_lowercase().cmp(&sb.title.to_lowercase());
+                    if cmp != std::cmp::Ordering::Equal {
+                        cmp
+                    } else {
+                        sa.artist.to_lowercase().cmp(&sb.artist.to_lowercase())
+                    }
                 }
                 SortMode::Artist => {
                     let cmp = sa.artist.to_lowercase().cmp(&sb.artist.to_lowercase());

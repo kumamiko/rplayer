@@ -62,7 +62,7 @@ impl SearchMode {
 /// Sorting mode for the playlist
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SortMode {
-    /// Sort by filename (default, original order)
+    /// Sort by song title (default)
     #[default]
     Filename,
     /// Sort by artist
@@ -87,7 +87,7 @@ impl SortMode {
     /// Get display string
     pub fn as_str(&self) -> &'static str {
         match self {
-            SortMode::Filename => "文件名",
+            SortMode::Filename => "歌曲名",
             SortMode::Artist => "歌手",
             SortMode::Album => "专辑",
             SortMode::Folder => "文件夹",
