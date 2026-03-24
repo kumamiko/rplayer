@@ -1,3 +1,4 @@
+use crate::audio::SeekableSource;
 use anyhow::Result;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
 use std::fs::File;
@@ -199,8 +200,8 @@ impl AudioPlayer {
         let sink = Sink::try_new(self._stream_handle.as_ref().unwrap())?;
         sink.set_volume(self.volume);
 
-        let source = Self::create_decoder(path)?
-            .skip_duration(pos);
+        let mut source = SeekableSource::new(path)?;
+        source.seek_to(pos)?;
 
         sink.append(source);
         if self.is_paused {

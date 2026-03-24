@@ -60,8 +60,8 @@ impl InputHandler {
 
         match key.code {
             // Quit
-            KeyCode::Char('q') => app.quit(),
-            KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => app.quit(),
+            KeyCode::Char('q') => app.quit(audio_player),
+            KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => app.quit(audio_player),
 
             // Navigation (Vim style with count)
             KeyCode::Char('j') | KeyCode::Down => {

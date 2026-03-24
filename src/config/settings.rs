@@ -6,12 +6,20 @@ use std::path::PathBuf;
 pub struct Config {
     /// Music folder to scan
     pub music_folder: String,
+    /// Last playing song path
+    #[serde(default)]
+    pub last_song_path: String,
+    /// Last playback position in seconds
+    #[serde(default)]
+    pub last_position_secs: u64,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             music_folder: String::new(),
+            last_song_path: String::new(),
+            last_position_secs: 0,
         }
     }
 }

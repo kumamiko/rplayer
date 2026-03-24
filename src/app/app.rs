@@ -193,6 +193,12 @@ impl App {
         
         // Start background scan
         self.start_scan();
+
+        // Restore last playback state
+        let _restored = self.restore_playback_state(&mut audio_player);
+        if _restored {
+            self.set_status("已恢复上次播放");
+        }
         
         while self.running {
             // Poll background scan results
@@ -766,8 +772,83 @@ impl App {
         self.status_expiry = Some(Instant::now() + Duration::from_secs(3));
     }
     
-    pub fn quit(&mut self) {
+    pub fn quit(&mut self, audio_player: &AudioPlayer) {
         self.running = false;
+        // Save playback state
+        self.save_playback_state(audio_player);
+    }
+
+    /// Save current playback position to config for restore on next launch
+    fn save_playback_state(&mut self, audio_player: &AudioPlayer) {
+        if let Some(song_idx) = self.current_song_index {
+            if let Some(song) = self.songs.get(song_idx) {
+                let pos = audio_player.current_position();
+                self.config.last_song_path = song.path.clone();
+                self.config.last_position_secs = pos.as_secs();
+                let _ = self.config.save();
+            }
+        } else {
+            // Not playing anything, clear saved state
+            if !self.config.last_song_path.is_empty() {
+                self.config.last_song_path.clear();
+                self.config.last_position_secs = 0;
+                let _ = self.config.save();
+            }
+        }
+    }
+
+    /// Try to restore last playback state. Returns true if restored.
+    pub fn restore_playback_state(&mut self, audio_player: &mut AudioPlayer) -> bool {
+        if self.config.last_song_path.is_empty() {
+            return false;
+        }
+
+        // Find the song in current list
+        let song_idx = self.songs.iter().position(|s| s.path == self.config.last_song_path);
+        let song_idx = match song_idx {
+            Some(idx) => idx,
+            None => {
+                // Song no longer exists, clear saved state
+                self.config.last_song_path.clear();
+                self.config.last_position_secs = 0;
+                let _ = self.config.save();
+                return false;
+            }
+        };
+
+        let song = &self.songs[song_idx];
+        let pos_secs = self.config.last_position_secs;
+
+        if pos_secs == 0 {
+            if let Ok(()) = audio_player.play(&song.path) {
+                self.current_song_index = Some(song_idx);
+                self.is_playing = false;
+                self.duration = song.duration;
+                self.current_pos = Duration::ZERO;
+                audio_player.toggle_pause();
+                if let Some(list_pos) = self.filtered_indices.iter().position(|&i| i == song_idx) {
+                    self.selected_index = list_pos;
+                    self.adjust_scroll();
+                }
+                return true;
+            }
+        } else {
+            if let Ok(()) = audio_player.play(&song.path) {
+                self.current_song_index = Some(song_idx);
+                self.is_playing = false;
+                self.duration = song.duration;
+                self.current_pos = Duration::from_secs(pos_secs);
+                let _ = audio_player.seek_relative(true, pos_secs);
+                audio_player.toggle_pause();
+                if let Some(list_pos) = self.filtered_indices.iter().position(|&i| i == song_idx) {
+                    self.selected_index = list_pos;
+                    self.adjust_scroll();
+                }
+                return true;
+            }
+        }
+
+        false
     }
 }
 

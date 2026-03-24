@@ -13,6 +13,7 @@ crossterm = "0.28"
 
 # Audio
 rodio = { version = "0.19", default-features = false, features = ["symphonia-all"] }
+symphonia = { version = "0.5.5", features = ["mp3", "flac", "wav", "ogg", "aac", "isomp4", "aiff"] }
 
 # Metadata
 lofty = "0.21"
