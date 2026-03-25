@@ -14,11 +14,9 @@ Powered by GLM-5
 - 实时搜索过滤（歌曲名/歌手/专辑/文件名）
 - 多种排序方式（歌曲名/歌手/专辑/文件夹）
 - 多种播放模式（顺序/单曲循环/列表循环/随机）
-- 后台异步扫描，启动不阻塞界面
-- 增量扫描 + 缓存，二次启动秒开
-- 跨平台支持（Linux / Windows/ Macos）
-- 播放位置记忆，退出后下次启动自动恢复（默认暂停状态）
-- 基于 symphonia 原生 seek 的高性能快进/快退（O(1) seek table）
+- 跨平台支持（Linux / Windows / macOS）
+- 自定义主题色（边框、标题、选中行背景）
+- 播放位置记忆，退出后下次启动自动恢复（暂停状态）
 
 ## 截图
 
@@ -57,21 +55,6 @@ cargo build --release
 
 # 运行
 ./target/release/rplayer
-```
-
-### 交叉编译到 Windows
-
-需要安装 MinGW 工具链：
-
-```bash
-# Ubuntu/Debian
-sudo apt install mingw-w64
-
-# 添加 target
-rustup target add x86_64-pc-windows-gnu
-
-# 编译
-cargo build --target x86_64-pc-windows-gnu --release
 ```
 
 ## 使用方法
@@ -154,22 +137,34 @@ cargo build --target x86_64-pc-windows-gnu --release
 | 按键 | 功能 |
 |------|------|
 | `R` | 重新扫描媒体库（后台执行） |
+| `T` | 修改主题色 |
 | `?` | 显示帮助 |
 | `q` / `Ctrl+C` | 退出 |
 
 ## 配置
 
 配置文件 `config.toml` 
-
-windows自动生成在可执行文件同目录下
-linux, macos 自动生成在 `~/.rplayer/` 目录下
+- windows自动生成在可执行文件同目录下
+- linux, macos 自动生成在 `~/.rplayer/` 目录下
 
 ```toml
 music_folder = "/path/to/music"
+# 主题色，6位十六进制（如 "56B6C2"），留空使用默认颜色
+themecolor = ""
 # 以下字段由程序自动维护，无需手动编辑
 last_song_path = ""
 last_position_secs = 0
 ```
+
+### 主题色
+
+按 `T` 进入主题色输入模式：
+
+- 输入 6 位十六进制颜色值（如 `56B6C2`），可选加 `#` 前缀
+- 直接 `Enter` 可清空主题色，恢复默认颜色
+- `Esc` 取消编辑
+- 主题色影响范围：所有圆角边框颜色、边框标题文字颜色、播放列表选中行背景色
+- 边框标题文字会自动提亮，确保在深色主题下也清晰可见
 
 ## 播放恢复
 
@@ -191,6 +186,8 @@ last_position_secs = 0
 - 首次启动：全量扫描，解析所有文件元数据
 - 后续启动：加载缓存 → 后台增量扫描（仅解析新增/修改的文件）
 - 缓存文件存储在 `cache/` 文件夹中
+  - Linux / macOS：`~/.rplayer/cache/`
+  - Windows：与可执行文件同目录的 `cache/`
 - 通过文件修改时间（mtime）判断是否需要重新解析
 
 ## 技术栈
