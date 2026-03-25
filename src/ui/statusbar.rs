@@ -65,6 +65,10 @@ impl<'a> Widget for StatusbarWidget<'a> {
                 .bg(Color::Cyan)
                 .fg(Color::Black)
                 .add_modifier(Modifier::BOLD),
+            Mode::ThemeColor => Style::default()
+                .bg(Color::Magenta)
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
         };
         let mode_text = format!(" {} ", self.app.mode.as_str());
         

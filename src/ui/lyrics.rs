@@ -11,11 +11,13 @@ use std::time::Duration;
 pub struct LyricsWidget<'a> {
     lyrics: &'a LyricsManager,
     position: Duration,
+    theme_border: Color,
+    theme_title: Color,
 }
 
 impl<'a> LyricsWidget<'a> {
-    pub fn new(lyrics: &'a LyricsManager, position: Duration) -> Self {
-        Self { lyrics, position }
+    pub fn new(lyrics: &'a LyricsManager, position: Duration, theme_border: Color, theme_title: Color) -> Self {
+        Self { lyrics, position, theme_border, theme_title }
     }
 }
 
@@ -70,9 +72,10 @@ impl<'a> Widget for LyricsWidget<'a> {
             .block(
                 Block::default()
                     .title(" ♪ ")
+                    .title_style(Style::default().fg(self.theme_title))
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
-                    .border_style(Style::default().fg(Color::DarkGray))
+                    .border_style(Style::default().fg(self.theme_border))
             )
             .alignment(Alignment::Center);
         

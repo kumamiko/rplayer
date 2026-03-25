@@ -12,6 +12,9 @@ pub struct Config {
     /// Last playback position in seconds
     #[serde(default)]
     pub last_position_secs: u64,
+    /// Theme color in hex (e.g. "56B6C2" or "#56B6C2"), affects borders, titles, and selection
+    #[serde(default)]
+    pub themecolor: String,
 }
 
 impl Default for Config {
@@ -20,6 +23,7 @@ impl Default for Config {
             music_folder: String::new(),
             last_song_path: String::new(),
             last_position_secs: 0,
+            themecolor: String::new(),
         }
     }
 }

@@ -10,6 +10,8 @@ pub enum Mode {
     ConfirmRefresh,
     /// Help dialog: showing keybindings
     Help,
+    /// Theme color input mode: typing hex color
+    ThemeColor,
 }
 
 impl Mode {
@@ -19,6 +21,7 @@ impl Mode {
             Mode::Search => "Search",
             Mode::ConfirmRefresh => "Confirm",
             Mode::Help => "Help",
+            Mode::ThemeColor => "ThemeColor",
         }
     }
 }

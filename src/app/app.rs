@@ -40,6 +40,9 @@ pub struct App {
     pub search_mode: SearchMode,
     pub sort_mode: SortMode,
     
+    // Theme color input
+    pub theme_color_input: String,
+    
     // Status message
     pub status_message: String,
     pub status_expiry: Option<Instant>,
@@ -127,6 +130,7 @@ impl Default for App {
             search_query: String::new(),
             search_mode: SearchMode::default(),
             sort_mode: SortMode::default(),
+            theme_color_input: String::new(),
             status_message: String::new(),
             status_expiry: None,
             count: None,
@@ -257,6 +261,83 @@ impl App {
         } else {
             PathBuf::from(&self.config.music_folder)
         }
+    }
+
+    /// Parse theme color from hex string (e.g. "56B6C2" or "#56B6C2")
+    /// Returns None if invalid or empty, falling back to default colors
+    pub fn theme_color(&self) -> Option<ratatui::style::Color> {
+        let hex = self.config.themecolor.trim().trim_start_matches('#');
+        if hex.len() != 6 {
+            return None;
+        }
+        let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+        let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+        let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+        Some(ratatui::style::Color::Rgb(r, g, b))
+    }
+
+    /// Get a brightened version of theme color for title text.
+    /// Boosts saturation by at least 30% and lightness by at least 30% in HSL space.
+    pub fn theme_color_bright(&self) -> Option<ratatui::style::Color> {
+        let hex = self.config.themecolor.trim().trim_start_matches('#');
+        if hex.len() != 6 {
+            return None;
+        }
+        let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+        let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+        let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+
+        // RGB -> HSL
+        let rf = r as f32 / 255.0;
+        let gf = g as f32 / 255.0;
+        let bf = b as f32 / 255.0;
+        let max = rf.max(gf).max(bf);
+        let min = rf.min(gf).min(bf);
+        let l = (max + min) / 2.0;
+
+        let (h, mut s) = if (max - min).abs() < f32::EPSILON {
+            (0.0, 0.0)
+        } else {
+            let d = max - min;
+            let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
+            let h = if (max - rf).abs() < f32::EPSILON {
+                (gf - bf) / d + if gf < bf { 6.0 } else { 0.0 }
+            } else if (max - gf).abs() < f32::EPSILON {
+                (bf - rf) / d + 2.0
+            } else {
+                (rf - gf) / d + 4.0
+            };
+            (h / 6.0, s)
+        };
+
+        // Boost saturation by at least 30%
+        s = (s * 1.3).min(1.0).max(if s > 0.0 { 0.3 } else { 0.0 });
+        // Boost lightness by at least 50%
+        let l = (l * 1.5).min(0.9);
+
+        // HSL -> RGB
+        fn hue2rgb(p: f32, q: f32, t: f32) -> f32 {
+            let t = if t < 0.0 { t + 1.0 } else if t > 1.0 { t - 1.0 } else { t };
+            if t < 1.0 / 6.0 { p + (q - p) * 6.0 * t }
+            else if t < 0.5 { q }
+            else if t < 2.0 / 3.0 { p + (q - p) * (2.0 / 3.0 - t) * 6.0 }
+            else { p }
+        }
+
+        let (rr, gg, bb) = if s < f32::EPSILON {
+            let v = (l * 255.0).min(255.0) as u8;
+            (v, v, v)
+        } else {
+            let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+            let p = 2.0 * l - q;
+            (
+                (hue2rgb(p, q, h + 1.0 / 3.0) * 255.0).min(255.0) as u8,
+                (hue2rgb(p, q, h) * 255.0).min(255.0) as u8,
+                (hue2rgb(p, q, h - 1.0 / 3.0) * 255.0).min(255.0) as u8,
+            )
+        };
+
+        Some(ratatui::style::Color::Rgb(rr, gg, bb))
     }
     
     fn get_music_dir_str(&self) -> String {

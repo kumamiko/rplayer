@@ -6,11 +6,14 @@ use ratatui::{
     buffer::Buffer,
 };
 
-pub struct HelpWidget;
+pub struct HelpWidget {
+    theme_border: Color,
+    theme_title: Color,
+}
 
 impl HelpWidget {
-    pub fn new() -> Self {
-        Self
+    pub fn new(theme_border: Color, theme_title: Color) -> Self {
+        Self { theme_border, theme_title }
     }
 }
 
@@ -21,7 +24,7 @@ impl Widget for HelpWidget {
         
         let help_lines = vec![
             Line::from(Span::styled("快捷键帮助", Style::default()
-                .fg(Color::Cyan)
+                .fg(self.theme_title)
                 .add_modifier(Modifier::BOLD))),
             Line::from(""),
             Line::from(vec![
@@ -98,6 +101,10 @@ impl Widget for HelpWidget {
                 Span::styled("  R            ", Style::default().fg(Color::Yellow)),
                 Span::raw("重新扫描媒体库"),
             ]),
+            Line::from(vec![
+                Span::styled("  T            ", Style::default().fg(Color::Yellow)),
+                Span::raw("修改主题色"),
+            ]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("  q            ", Style::default().fg(Color::Yellow)),
@@ -110,7 +117,7 @@ impl Widget for HelpWidget {
         
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan));
+            .border_style(Style::default().fg(self.theme_border));
         
         let paragraph = Paragraph::new(help_lines)
             .block(block)

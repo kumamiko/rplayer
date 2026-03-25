@@ -107,9 +107,10 @@ impl<'a> Widget for PlaylistWidget<'a> {
                 let index = display_idx + 1;
                 let index_str = format!("{:3}.", index);
                 
+                let theme_bg = self.app.theme_color();
                 let style = if is_selected {
                     Style::default()
-                        .bg(Color::Blue)
+                        .bg(theme_bg.unwrap_or(Color::Blue))
                         .fg(Color::White)
                         .add_modifier(Modifier::BOLD)
                 } else {
@@ -132,15 +133,18 @@ impl<'a> Widget for PlaylistWidget<'a> {
             .map(|(line, style)| ListItem::new(line).style(style))
             .collect();
         
+        let theme_border = self.app.theme_color().unwrap_or(Color::Cyan);
+        let theme_title = self.app.theme_color_bright().unwrap_or(Color::Cyan);
         let title = format!(" 歌曲列表 [{} 首] ", self.app.filtered_indices.len());
         
         let list = List::new(items)
             .block(
                 Block::default()
                     .title(title)
+                    .title_style(Style::default().fg(theme_title))
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
-                    .border_style(Style::default().fg(Color::Cyan))
+                    .border_style(Style::default().fg(theme_border))
             );
         
         Widget::render(list, area, buf);

@@ -16,6 +16,7 @@ impl InputHandler {
             Mode::Search => self.handle_search(app, key),
             Mode::ConfirmRefresh => self.handle_confirm_refresh(app, audio_player, key),
             Mode::Help => self.handle_help(app, key),
+            Mode::ThemeColor => self.handle_theme_color(app, key),
         }
     }
     
@@ -189,6 +190,14 @@ impl InputHandler {
                 app.cycle_sort();
             }
             
+            // Theme color input
+            KeyCode::Char('T') => {
+                app.theme_color_input = app.config.themecolor.clone();
+                app.mode = Mode::ThemeColor;
+                app.set_status("输入主题色 (6位十六进制, 如 56B6C2), Enter确认, Esc取消, 如果输入为空, 则使用默认主题色");
+                app.status_expiry = None;
+            }
+            
             // Rescan - enter confirm mode
             KeyCode::Char('R') => {
                 app.mode = Mode::ConfirmRefresh;
@@ -271,6 +280,49 @@ impl InputHandler {
     fn handle_help(&self, app: &mut App, _key: KeyEvent) -> Result<()> {
         // Any key closes help
         app.mode = Mode::Normal;
+        Ok(())
+    }
+    
+    fn handle_theme_color(&self, app: &mut App, key: KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Esc => {
+                app.theme_color_input.clear();
+                app.mode = Mode::Normal;
+                app.status_message.clear();
+                app.status_expiry = None;
+            }
+            KeyCode::Enter => {
+                let hex = app.theme_color_input.trim().trim_start_matches('#');
+                if hex.is_empty() {
+                    app.config.themecolor.clear();
+                    app.config.save()?;
+                    app.set_status("主题色已恢复默认");
+                } else if hex.len() == 6
+                    && u8::from_str_radix(&hex[0..2], 16).is_ok()
+                    && u8::from_str_radix(&hex[2..4], 16).is_ok()
+                    && u8::from_str_radix(&hex[4..6], 16).is_ok()
+                {
+                    app.config.themecolor = hex.to_string();
+                    app.config.save()?;
+                    app.set_status(format!("主题色已更新: #{}", hex));
+                } else {
+                    app.set_status("无效颜色值, 需要6位十六进制 (如 56B6C2)");
+                    app.status_expiry = None;
+                }
+                app.theme_color_input.clear();
+                app.mode = Mode::Normal;
+            }
+            KeyCode::Backspace => {
+                app.theme_color_input.pop();
+            }
+            KeyCode::Char(c) if c.is_ascii_hexdigit() || c == '#' => {
+                let max_len = if app.theme_color_input.starts_with('#') { 7 } else { 6 };
+                if app.theme_color_input.len() < max_len {
+                    app.theme_color_input.push(c);
+                }
+            }
+            _ => {}
+        }
         Ok(())
     }
 }
