@@ -263,13 +263,18 @@ impl App {
             };
             
             if crossterm::event::poll(timeout)? {
-                if let Event::Key(key) = event::read()? {
-                    // Only handle key press events (ignore release)
-                    if key.kind == KeyEventKind::Press {
-                        self.dirty = true;
-                        let handler = InputHandler::new();
-                        handler.handle(self, &mut audio_player, &mut lyrics_manager, key)?;
+                match event::read()? {
+                    Event::Key(key) => {
+                        if key.kind == KeyEventKind::Press {
+                            self.dirty = true;
+                            let handler = InputHandler::new();
+                            handler.handle(self, &mut audio_player, &mut lyrics_manager, key)?;
+                        }
                     }
+                    Event::Resize(_, _) | Event::FocusGained => {
+                        self.dirty = true;
+                    }
+                    _ => {}
                 }
             }
             
