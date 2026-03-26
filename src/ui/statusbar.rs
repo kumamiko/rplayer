@@ -65,7 +65,7 @@ impl<'a> Widget for StatusbarWidget<'a> {
                 .bg(Color::Cyan)
                 .fg(Color::Black)
                 .add_modifier(Modifier::BOLD),
-            Mode::ThemeColor => Style::default()
+            Mode::Theme => Style::default()
                 .bg(Color::Magenta)
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),

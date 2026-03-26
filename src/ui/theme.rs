@@ -6,37 +6,38 @@ use ratatui::{
     buffer::Buffer,
 };
 
-pub struct SearchWidget<'a> {
-    query: &'a str,
+pub struct ThemeWidget<'a> {
+    input: &'a str,
     cursor: usize,
 }
 
-impl<'a> SearchWidget<'a> {
-    pub fn new(query: &'a str, cursor: usize) -> Self {
-        Self { query, cursor }
+impl<'a> ThemeWidget<'a> {
+    pub fn new(input: &'a str, cursor: usize) -> Self {
+        Self { input, cursor }
     }
 }
 
-impl<'a> Widget for SearchWidget<'a> {
+impl<'a> Widget for ThemeWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let chars: Vec<char> = self.query.chars().collect();
+        let chars: Vec<char> = self.input.chars().collect();
         let cursor = self.cursor.min(chars.len());
+        let label_style = Style::default().bg(Color::Magenta).fg(Color::Black);
+        let text_style = Style::default().fg(Color::Yellow);
         let cursor_style = Style::default().bg(Color::White).fg(Color::Black);
-        
+
         let mut spans = vec![
-            Span::styled(" SEARCH: ", Style::default().bg(Color::Yellow).fg(Color::Black)),
+            Span::styled(" THEME: ", label_style),
         ];
-        
+
         for (i, &c) in chars.iter().enumerate() {
-            let style = if i == cursor { cursor_style } else { Style::default().fg(Color::White) };
+            let style = if i == cursor { cursor_style } else { text_style };
             spans.push(Span::styled(c.to_string(), style));
         }
-        
-        // 光标在末尾时显示带背景色的空格
+
         if cursor == chars.len() {
             spans.push(Span::styled(" ", cursor_style));
         }
-        
+
         let paragraph = Paragraph::new(Line::from(spans));
         Widget::render(paragraph, area, buf);
     }

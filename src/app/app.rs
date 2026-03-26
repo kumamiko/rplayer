@@ -37,11 +37,13 @@ pub struct App {
     
     // Search
     pub search_query: String,
+    pub search_cursor: usize,
     pub search_mode: SearchMode,
     pub sort_mode: SortMode,
     
     // Theme color input
     pub theme_color_input: String,
+    pub theme_color_cursor: usize,
     
     // Status message
     pub status_message: String,
@@ -128,9 +130,11 @@ impl Default for App {
             duration: Duration::ZERO,
             play_mode: PlayMode::None,
             search_query: String::new(),
+            search_cursor: 0,
             search_mode: SearchMode::default(),
             sort_mode: SortMode::default(),
             theme_color_input: String::new(),
+            theme_color_cursor: 0,
             status_message: String::new(),
             status_expiry: None,
             count: None,

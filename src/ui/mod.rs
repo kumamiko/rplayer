@@ -3,6 +3,7 @@ mod playlist;
 mod lyrics;
 mod statusbar;
 mod search;
+mod theme;
 mod message;
 mod help;
 
@@ -10,6 +11,7 @@ pub use playlist::*;
 pub use lyrics::*;
 pub use statusbar::*;
 pub use search::*;
+pub use theme::*;
 pub use message::*;
 pub use help::*;
 
@@ -53,27 +55,14 @@ impl<'a> Ui<'a> {
         
         // Search bar (when in search mode)
         if self.app.mode == crate::app::Mode::Search {
-            let search = SearchWidget::new(&self.app.search_query);
+            let search = SearchWidget::new(&self.app.search_query, self.app.search_cursor);
             f.render_widget(search, chunks.statusbar);
         }
         
-        // Theme color input (when in theme color mode)
-        if self.app.mode == crate::app::Mode::ThemeColor {
-            let bg = ratatui::style::Style::default().bg(ratatui::style::Color::Magenta).fg(ratatui::style::Color::White);
-            let mut spans = vec![
-                ratatui::text::Span::styled(" THEME: ", bg),
-                ratatui::text::Span::styled(&self.app.theme_color_input, bg),
-                ratatui::text::Span::styled("█", bg),
-            ];
-            let used = 8 + self.app.theme_color_input.len() + 1;
-            if (chunks.statusbar.width as usize) > used {
-                spans.push(ratatui::text::Span::styled(
-                    " ".repeat((chunks.statusbar.width as usize) - used),
-                    bg,
-                ));
-            }
-            let paragraph = ratatui::widgets::Paragraph::new(ratatui::text::Line::from(spans));
-            f.render_widget(paragraph, chunks.statusbar);
+        // Theme color input (when in theme mode)
+        if self.app.mode == crate::app::Mode::Theme {
+            let theme = ThemeWidget::new(&self.app.theme_color_input, self.app.theme_color_cursor);
+            f.render_widget(theme, chunks.statusbar);
         }
         
         // Help popup (when in help mode)

@@ -16,7 +16,7 @@ impl InputHandler {
             Mode::Search => self.handle_search(app, key),
             Mode::ConfirmRefresh => self.handle_confirm_refresh(app, audio_player, key),
             Mode::Help => self.handle_help(app, key),
-            Mode::ThemeColor => self.handle_theme_color(app, key),
+            Mode::Theme => self.handle_theme_color(app, key),
         }
     }
     
@@ -168,11 +168,13 @@ impl InputHandler {
             KeyCode::Char('/') | KeyCode::Char('f') => {
                 app.mode = Mode::Search;
                 app.search_query.clear();
+                app.search_cursor = 0;
             }
             
             // Clear filter
             KeyCode::Char('F') => {
                 app.search_query.clear();
+                app.search_cursor = 0;
                 app.filtered_indices = (0..app.songs.len()).collect();
                 app.selected_index = 0;
                 app.scroll_offset = 0;
@@ -193,8 +195,9 @@ impl InputHandler {
             // Theme color input
             KeyCode::Char('T') => {
                 app.theme_color_input = app.config.themecolor.clone();
-                app.mode = Mode::ThemeColor;
-                app.set_status("输入主题色 (6位十六进制, 如 56B6C2), Enter确认, Esc取消, 如果输入为空, 则使用默认主题色");
+                app.theme_color_cursor = app.theme_color_input.chars().count();
+                app.mode = Mode::Theme;
+                app.set_status("输入主题色 (6位十六进制, 如 56B6C2)");
                 app.status_expiry = None;
             }
             
@@ -226,6 +229,7 @@ impl InputHandler {
             KeyCode::Esc => {
                 // Cancel search and restore all songs
                 app.search_query.clear();
+                app.search_cursor = 0;
                 app.filtered_indices = (0..app.songs.len()).collect();
                 app.selected_index = 0;
                 app.scroll_offset = 0;
@@ -238,14 +242,39 @@ impl InputHandler {
                 app.mode = Mode::Normal;
             }
             KeyCode::Backspace => {
-                app.search_query.pop();
+                if app.search_cursor > 0 {
+                    app.search_query.remove(app.search_cursor - 1);
+                    app.search_cursor -= 1;
+                }
+            }
+            KeyCode::Delete => {
+                if app.search_cursor < app.search_query.len() {
+                    app.search_query.remove(app.search_cursor);
+                }
+            }
+            KeyCode::Left => {
+                if app.search_cursor > 0 {
+                    app.search_cursor -= 1;
+                }
+            }
+            KeyCode::Right => {
+                if app.search_cursor < app.search_query.len() {
+                    app.search_cursor += 1;
+                }
+            }
+            KeyCode::Home => {
+                app.search_cursor = 0;
+            }
+            KeyCode::End => {
+                app.search_cursor = app.search_query.len();
             }
             KeyCode::Char('f') if key.modifiers == KeyModifiers::CONTROL => {
                 app.search_mode = app.search_mode.next();
                 app.set_status(format!("搜索字段: {}", app.search_mode.as_str()));
             }
             KeyCode::Char(c) => {
-                app.search_query.push(c);
+                app.search_query.insert(app.search_cursor, c);
+                app.search_cursor += 1;
             }
             _ => {
                 app.count = None;
@@ -287,6 +316,7 @@ impl InputHandler {
         match key.code {
             KeyCode::Esc => {
                 app.theme_color_input.clear();
+                app.theme_color_cursor = 0;
                 app.mode = Mode::Normal;
                 app.status_message.clear();
                 app.status_expiry = None;
@@ -310,15 +340,48 @@ impl InputHandler {
                     app.status_expiry = None;
                 }
                 app.theme_color_input.clear();
+                app.theme_color_cursor = 0;
                 app.mode = Mode::Normal;
             }
             KeyCode::Backspace => {
-                app.theme_color_input.pop();
+                if app.theme_color_cursor > 0 {
+                    let mut chars: Vec<char> = app.theme_color_input.chars().collect();
+                    chars.remove(app.theme_color_cursor - 1);
+                    app.theme_color_input = chars.iter().collect();
+                    app.theme_color_cursor -= 1;
+                }
+            }
+            KeyCode::Delete => {
+                if app.theme_color_cursor < app.theme_color_input.chars().count() {
+                    let chars: Vec<char> = app.theme_color_input.chars().collect();
+                    app.theme_color_input = chars[..app.theme_color_cursor].iter().collect::<String>() 
+                        + &chars[app.theme_color_cursor + 1..].iter().collect::<String>();
+                }
+            }
+            KeyCode::Left => {
+                if app.theme_color_cursor > 0 {
+                    app.theme_color_cursor -= 1;
+                }
+            }
+            KeyCode::Right => {
+                if app.theme_color_cursor < app.theme_color_input.chars().count() {
+                    app.theme_color_cursor += 1;
+                }
+            }
+            KeyCode::Home => {
+                app.theme_color_cursor = 0;
+            }
+            KeyCode::End => {
+                app.theme_color_cursor = app.theme_color_input.chars().count();
             }
             KeyCode::Char(c) if c.is_ascii_hexdigit() || c == '#' => {
+                let char_count = app.theme_color_input.chars().count();
                 let max_len = if app.theme_color_input.starts_with('#') { 7 } else { 6 };
-                if app.theme_color_input.len() < max_len {
-                    app.theme_color_input.push(c);
+                if char_count < max_len {
+                    let mut chars: Vec<char> = app.theme_color_input.chars().collect();
+                    chars.insert(app.theme_color_cursor, c);
+                    app.theme_color_input = chars.iter().collect();
+                    app.theme_color_cursor += 1;
                 }
             }
             _ => {}
