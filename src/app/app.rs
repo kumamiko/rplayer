@@ -229,7 +229,7 @@ impl App {
                     // Only handle key press events (ignore release)
                     if key.kind == KeyEventKind::Press {
                         let handler = InputHandler::new();
-                        handler.handle(self, &mut audio_player, key)?;
+                        handler.handle(self, &mut audio_player, &mut lyrics_manager, key)?;
                     }
                 }
             }
@@ -243,15 +243,7 @@ impl App {
             if self.is_playing && self.current_song_index.is_some() && !audio_player.is_playing() {
                 self.is_playing = false;
                 // Auto-play next song
-                self.next_song(&mut audio_player);
-            }
-            
-            // Load and update lyrics
-            if let Some(idx) = self.current_song_index {
-                if idx < self.songs.len() {
-                    let song = &self.songs[idx];
-                    lyrics_manager.load(&song.path);
-                }
+                self.next_song(&mut audio_player, &mut lyrics_manager);
             }
             
             // Tick
@@ -271,29 +263,29 @@ impl App {
         }
     }
 
-    /// Parse theme color from hex string (e.g. "56B6C2" or "#56B6C2")
-    /// Returns None if invalid or empty, falling back to default colors
-    pub fn theme_color(&self) -> Option<ratatui::style::Color> {
-        let hex = self.config.themecolor.trim().trim_start_matches('#');
+    /// Parse hex color string (e.g. "56B6C2" or "#56B6C2") to (r, g, b)
+    fn parse_hex_color(hex: &str) -> Option<(u8, u8, u8)> {
+        let hex = hex.trim().trim_start_matches('#');
         if hex.len() != 6 {
             return None;
         }
         let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
         let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
         let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+        Some((r, g, b))
+    }
+
+    /// Parse theme color from hex string (e.g. "56B6C2" or "#56B6C2")
+    /// Returns None if invalid or empty, falling back to default colors
+    pub fn theme_color(&self) -> Option<ratatui::style::Color> {
+        let (r, g, b) = Self::parse_hex_color(&self.config.themecolor)?;
         Some(ratatui::style::Color::Rgb(r, g, b))
     }
 
     /// Get a brightened version of theme color for title text.
     /// Boosts saturation by at least 30% and lightness by at least 30% in HSL space.
     pub fn theme_color_bright(&self) -> Option<ratatui::style::Color> {
-        let hex = self.config.themecolor.trim().trim_start_matches('#');
-        if hex.len() != 6 {
-            return None;
-        }
-        let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
-        let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
-        let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+        let (r, g, b) = Self::parse_hex_color(&self.config.themecolor)?;
 
         // RGB -> HSL
         let rf = r as f32 / 255.0;
@@ -545,18 +537,24 @@ impl App {
 
         #[cfg(not(target_os = "windows"))]
         let cache_dir = {
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            std::path::Path::new(&home).join(".rplayer").join("cache")
+            let dir = dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".rplayer")
+                .join("cache");
+            let _ = std::fs::create_dir_all(&dir);
+            dir
         };
-        #[cfg(target_os = "windows")]
-        let cache_dir = std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("cache");
 
-        // Create cache directory if not exists
-        let _ = std::fs::create_dir_all(&cache_dir);
+        #[cfg(target_os = "windows")]
+        let cache_dir = {
+            let dir = std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("cache");
+            let _ = std::fs::create_dir_all(&dir);
+            dir
+        };
 
         cache_dir.join(format!("songs_cache_{:016x}.json", hash))
     }
@@ -592,7 +590,7 @@ impl App {
         Ok(())
     }
     
-    pub fn play_selected(&mut self, audio_player: &mut AudioPlayer) {
+    pub fn play_selected(&mut self, audio_player: &mut AudioPlayer, lyrics_manager: &mut LyricsManager) {
         if self.filtered_indices.is_empty() {
             return;
         }
@@ -608,6 +606,7 @@ impl App {
                     self.is_playing = true;
                     self.duration = song.duration;
                     self.current_pos = Duration::ZERO;
+                    lyrics_manager.load(&song.path);
                     self.status_message = format!("播放中: {} - {}", song.artist, song.title);
                 }
                 Err(e) => {
@@ -632,7 +631,7 @@ impl App {
         self.status_message = "停止".to_string();
     }
     
-    pub fn next_song(&mut self, audio_player: &mut AudioPlayer) {
+    pub fn next_song(&mut self, audio_player: &mut AudioPlayer, lyrics_manager: &mut LyricsManager) {
         if self.filtered_indices.is_empty() {
             return;
         }
@@ -673,10 +672,10 @@ impl App {
         };
         
         self.selected_index = next;
-        self.play_selected(audio_player);
+        self.play_selected(audio_player, lyrics_manager);
     }
     
-    pub fn prev_song(&mut self, audio_player: &mut AudioPlayer) {
+    pub fn prev_song(&mut self, audio_player: &mut AudioPlayer, lyrics_manager: &mut LyricsManager) {
         if self.filtered_indices.is_empty() {
             return;
         }
@@ -702,7 +701,7 @@ impl App {
         };
         
         self.selected_index = prev;
-        self.play_selected(audio_player);
+        self.play_selected(audio_player, lyrics_manager);
     }
     
     pub fn move_up(&mut self) {
@@ -741,7 +740,7 @@ impl App {
 
     pub fn consume_count(&mut self) -> usize {
         let count = self.count.take().unwrap_or(1);
-        if self.count.is_none() && self.status_expiry.is_none() {
+        if count > 1 || self.status_expiry.is_none() {
             self.status_message.clear();
         }
         count
@@ -917,8 +916,7 @@ impl App {
         }
 
         // Find the song in current list
-        let song_idx = self.songs.iter().position(|s| s.path == self.config.last_song_path);
-        let song_idx = match song_idx {
+        let song_idx = match self.songs.iter().position(|s| s.path == self.config.last_song_path) {
             Some(idx) => idx,
             None => {
                 // Song no longer exists, clear saved state
@@ -932,33 +930,23 @@ impl App {
         let song = &self.songs[song_idx];
         let pos_secs = self.config.last_position_secs;
 
-        if pos_secs == 0 {
-            if let Ok(()) = audio_player.play(&song.path) {
-                self.current_song_index = Some(song_idx);
-                self.is_playing = false;
-                self.duration = song.duration;
-                self.current_pos = Duration::ZERO;
-                audio_player.toggle_pause();
-                if let Some(list_pos) = self.filtered_indices.iter().position(|&i| i == song_idx) {
-                    self.selected_index = list_pos;
-                    self.adjust_scroll();
-                }
-                return true;
-            }
-        } else {
-            if let Ok(()) = audio_player.play(&song.path) {
-                self.current_song_index = Some(song_idx);
-                self.is_playing = false;
-                self.duration = song.duration;
+        if let Ok(()) = audio_player.play(&song.path) {
+            self.current_song_index = Some(song_idx);
+            self.is_playing = false;
+            self.duration = song.duration;
+            // Seek to saved position if needed
+            if pos_secs > 0 {
                 self.current_pos = Duration::from_secs(pos_secs);
-                let _ = audio_player.seek_relative(true, pos_secs);
-                audio_player.toggle_pause();
-                if let Some(list_pos) = self.filtered_indices.iter().position(|&i| i == song_idx) {
-                    self.selected_index = list_pos;
-                    self.adjust_scroll();
-                }
-                return true;
+                let _ = audio_player.seek_to(&song.path, Duration::from_secs(pos_secs));
+            } else {
+                self.current_pos = Duration::ZERO;
             }
+            audio_player.toggle_pause();
+            if let Some(list_pos) = self.filtered_indices.iter().position(|&i| i == song_idx) {
+                self.selected_index = list_pos;
+                self.adjust_scroll();
+            }
+            return true;
         }
 
         false
@@ -981,7 +969,10 @@ fn parse_song(path: &str) -> Result<Song> {
 
     let file_path = std::path::Path::new(path);
     let mtime = get_file_mtime(file_path);
-    let stem = file_path.file_stem().unwrap().to_str().unwrap_or("Unknown").to_string();
+    let stem = file_path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Unknown")
+        .to_string();
 
     let file = std::fs::File::open(file_path)?;
     let mss = symphonia::core::io::MediaSourceStream::new(Box::new(file), Default::default());

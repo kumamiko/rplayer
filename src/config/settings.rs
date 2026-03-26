@@ -37,12 +37,13 @@ impl Default for Config {
 impl Config {
     /// Get config file path
     /// Windows: same directory as executable
-    /// Other platforms: ~/.rplayer/
+    /// Other platforms: ~/.config/rplayer/
     fn config_path() -> PathBuf {
         #[cfg(not(target_os = "windows"))]
         {
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            let dir = std::path::Path::new(&home).join(".rplayer");
+            let dir = dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".rplayer");
             let _ = std::fs::create_dir_all(&dir);
             dir.join("config.toml")
         }

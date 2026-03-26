@@ -6,6 +6,7 @@ mod search;
 mod theme;
 mod message;
 mod help;
+pub mod utils;
 
 pub use playlist::*;
 pub use lyrics::*;
@@ -37,11 +38,11 @@ impl<'a> Ui<'a> {
         // Update visible height for dynamic scroll/page
         self.app.playlist_visible_height = chunks.playlist.height.saturating_sub(2) as usize;
         
-        // Playlist (left side)
+        // Playlist (top)
         let playlist = PlaylistWidget::new(self.app);
         f.render_stateful_widget(playlist, chunks.playlist, &mut ());
         
-        // Lyrics (right side)
+        // Lyrics (bottom)
         let lyrics_widget = LyricsWidget::new(self.lyrics, self.app.current_pos, theme_border, theme_title);
         f.render_widget(lyrics_widget, chunks.lyrics);
         

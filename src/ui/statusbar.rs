@@ -1,4 +1,5 @@
 use crate::app::{App, Mode, PlayMode};
+use crate::ui::utils;
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -15,33 +16,6 @@ pub struct StatusbarWidget<'a> {
 impl<'a> StatusbarWidget<'a> {
     pub fn new(app: &'a App) -> Self {
         Self { app }
-    }
-    
-    fn format_duration(d: std::time::Duration) -> String {
-        let total_secs = d.as_secs();
-        let mins = total_secs / 60;
-        let secs = total_secs % 60;
-        format!("{:02}:{:02}", mins, secs)
-    }
-    
-    fn truncate_to_width(s: &str, max_width: usize) -> String {
-        let mut width = 0;
-        let mut result = String::new();
-        
-        for ch in s.chars() {
-            let ch_width = UnicodeWidthStr::width(ch.to_string().as_str());
-            if width + ch_width > max_width - 3 {
-                break;
-            }
-            result.push(ch);
-            width += ch_width;
-        }
-        
-        if result.len() < s.len() {
-            format!("{}...", result)
-        } else {
-            result
-        }
     }
 }
 
@@ -80,12 +54,12 @@ impl<'a> Widget for StatusbarWidget<'a> {
         };
         
         // Right: Song name + progress
-        let pos = Self::format_duration(self.app.current_pos);
-        let dur = Self::format_duration(self.app.duration);
+        let pos = utils::format_duration_compact(self.app.current_pos);
+        let dur = utils::format_duration_compact(self.app.duration);
         
         let song_info = if let Some(idx) = self.app.current_song_index {
             if let Some(song) = self.app.songs.get(idx) {
-                let name = Self::truncate_to_width(&song.title, 30);
+                let name = utils::truncate_to_width(&song.title, 30);
                 format!("{} {}/{}", name, pos, dur)
             } else {
                 format!("{}/{}", pos, dur)

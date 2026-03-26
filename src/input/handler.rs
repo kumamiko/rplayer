@@ -1,5 +1,6 @@
 use crate::app::{App, Mode};
 use crate::audio::AudioPlayer;
+use crate::lyrics::LyricsManager;
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -10,17 +11,17 @@ impl InputHandler {
         Self
     }
     
-    pub fn handle(&self, app: &mut App, audio_player: &mut AudioPlayer, key: KeyEvent) -> Result<()> {
+    pub fn handle(&self, app: &mut App, audio_player: &mut AudioPlayer, lyrics_manager: &mut LyricsManager, key: KeyEvent) -> Result<()> {
         match app.mode {
-            Mode::Normal => self.handle_normal(app, audio_player, key),
+            Mode::Normal => self.handle_normal(app, audio_player, lyrics_manager, key),
             Mode::Search => self.handle_search(app, key),
-            Mode::ConfirmRefresh => self.handle_confirm_refresh(app, audio_player, key),
+            Mode::ConfirmRefresh => self.handle_confirm_refresh(app, audio_player, lyrics_manager, key),
             Mode::Help => self.handle_help(app, key),
             Mode::Theme => self.handle_theme_color(app, key),
         }
     }
     
-    fn handle_normal(&self, app: &mut App, audio_player: &mut AudioPlayer, key: KeyEvent) -> Result<()> {
+    fn handle_normal(&self, app: &mut App, audio_player: &mut AudioPlayer, lyrics_manager: &mut LyricsManager, key: KeyEvent) -> Result<()> {
         // Accumulate digit prefix (vim count)
         if let KeyCode::Char(c) = key.code {
             if c.is_ascii_digit() && c != '0' || app.count.is_some() && c.is_ascii_digit() {
@@ -142,11 +143,11 @@ impl InputHandler {
             }
 
             // Playback
-            KeyCode::Enter => app.play_selected(audio_player),
+            KeyCode::Enter => app.play_selected(audio_player, lyrics_manager),
             KeyCode::Char(' ') => app.toggle_pause(audio_player),
             KeyCode::Char('s') => app.stop(audio_player),
-            KeyCode::Char('n') => app.next_song(audio_player),
-            KeyCode::Char('p') => app.prev_song(audio_player),
+            KeyCode::Char('n') => app.next_song(audio_player, lyrics_manager),
+            KeyCode::Char('p') => app.prev_song(audio_player, lyrics_manager),
             
             // Volume
             KeyCode::Char('+') | KeyCode::Char('=') => {
@@ -243,13 +244,17 @@ impl InputHandler {
             }
             KeyCode::Backspace => {
                 if app.search_cursor > 0 {
-                    app.search_query.remove(app.search_cursor - 1);
+                    let mut chars: Vec<char> = app.search_query.chars().collect();
+                    chars.remove(app.search_cursor - 1);
+                    app.search_query = chars.iter().collect();
                     app.search_cursor -= 1;
                 }
             }
             KeyCode::Delete => {
-                if app.search_cursor < app.search_query.len() {
-                    app.search_query.remove(app.search_cursor);
+                if app.search_cursor < app.search_query.chars().count() {
+                    let mut chars: Vec<char> = app.search_query.chars().collect();
+                    chars.remove(app.search_cursor);
+                    app.search_query = chars.iter().collect();
                 }
             }
             KeyCode::Left => {
@@ -258,7 +263,7 @@ impl InputHandler {
                 }
             }
             KeyCode::Right => {
-                if app.search_cursor < app.search_query.len() {
+                if app.search_cursor < app.search_query.chars().count() {
                     app.search_cursor += 1;
                 }
             }
@@ -266,14 +271,16 @@ impl InputHandler {
                 app.search_cursor = 0;
             }
             KeyCode::End => {
-                app.search_cursor = app.search_query.len();
+                app.search_cursor = app.search_query.chars().count();
             }
             KeyCode::Char('f') if key.modifiers == KeyModifiers::CONTROL => {
                 app.search_mode = app.search_mode.next();
                 app.set_status(format!("搜索字段: {}", app.search_mode.as_str()));
             }
             KeyCode::Char(c) => {
-                app.search_query.insert(app.search_cursor, c);
+                let mut chars: Vec<char> = app.search_query.chars().collect();
+                chars.insert(app.search_cursor, c);
+                app.search_query = chars.iter().collect();
                 app.search_cursor += 1;
             }
             _ => {
@@ -289,7 +296,7 @@ impl InputHandler {
         Ok(())
     }
     
-    fn handle_confirm_refresh(&self, app: &mut App, _audio_player: &mut AudioPlayer, key: KeyEvent) -> Result<()> {
+    fn handle_confirm_refresh(&self, app: &mut App, _audio_player: &mut AudioPlayer, _lyrics_manager: &mut LyricsManager, key: KeyEvent) -> Result<()> {
         match key.code {
             KeyCode::Char('y') | KeyCode::Char('Y') => {
                 app.mode = Mode::Normal;

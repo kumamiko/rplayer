@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::ui::utils;
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -15,34 +16,6 @@ pub struct PlaylistWidget<'a> {
 impl<'a> PlaylistWidget<'a> {
     pub fn new(app: &'a App) -> Self {
         Self { app }
-    }
-    
-    fn format_duration(d: std::time::Duration) -> String {
-        let total_secs = d.as_secs();
-        let mins = total_secs / 60;
-        let secs = total_secs % 60;
-        format!("{:2}:{:02}", mins, secs)
-    }
-    
-    /// Truncate string by display width, safe for UTF-8
-    fn truncate_to_width(s: &str, max_width: usize) -> String {
-        let mut width = 0;
-        let mut result = String::new();
-        
-        for ch in s.chars() {
-            let ch_width = UnicodeWidthStr::width(ch.to_string().as_str());
-            if width + ch_width > max_width - 3 {
-                break;
-            }
-            result.push(ch);
-            width += ch_width;
-        }
-        
-        if result.len() < s.len() {
-            format!("{}...", result)
-        } else {
-            result
-        }
     }
     
     /// Pad string to specific display width
@@ -78,6 +51,7 @@ impl<'a> Widget for PlaylistWidget<'a> {
             (tw, aw, None)
         };
 
+        let theme_bg = self.app.theme_color();
         let items: Vec<ListItem> = self.app.filtered_indices
             .iter()
             .enumerate()
@@ -89,13 +63,13 @@ impl<'a> Widget for PlaylistWidget<'a> {
                 let is_playing = self.app.current_song_index == Some(song_idx);
                 
                 // Truncate and pad for proper alignment with dynamic widths
-                let title = Self::pad_to_width(&Self::truncate_to_width(&song.title, title_width), title_width);
-                let artist = Self::pad_to_width(&Self::truncate_to_width(&song.artist, artist_width), artist_width);
+                let title = Self::pad_to_width(&utils::truncate_to_width(&song.title, title_width), title_width);
+                let artist = Self::pad_to_width(&utils::truncate_to_width(&song.artist, artist_width), artist_width);
                 let album = album_width.map(|w| {
-                    Self::pad_to_width(&Self::truncate_to_width(&song.album, w), w)
+                    Self::pad_to_width(&utils::truncate_to_width(&song.album, w), w)
                 });
-                
-                let duration = Self::format_duration(song.duration);
+
+                let duration = utils::format_duration_wide(song.duration);
                 
                 let prefix = if is_playing {
                     if self.app.is_playing { "▶" } else { "⏸" }
@@ -107,7 +81,6 @@ impl<'a> Widget for PlaylistWidget<'a> {
                 let index = display_idx + 1;
                 let index_str = format!("{:3}.", index);
                 
-                let theme_bg = self.app.theme_color();
                 let style = if is_selected {
                     Style::default()
                         .bg(theme_bg.unwrap_or(Color::Blue))
@@ -148,14 +121,6 @@ impl<'a> Widget for PlaylistWidget<'a> {
             );
         
         Widget::render(list, area, buf);
-        
-        // Update scroll offset if needed
-        let visible_height = area.height.saturating_sub(2) as usize;
-        if self.app.selected_index < self.app.scroll_offset {
-            // Scroll up needed - but we can't mutate here
-        } else if self.app.selected_index >= self.app.scroll_offset + visible_height {
-            // Scroll down needed - but we can't mutate here
-        }
     }
 }
 

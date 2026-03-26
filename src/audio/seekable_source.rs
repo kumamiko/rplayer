@@ -83,11 +83,6 @@ impl SeekableSource {
         })
     }
 
-    #[allow(dead_code)]
-    pub fn total_duration(&self) -> Option<Duration> {
-        self.total_duration
-    }
-
     /// Seek to a specific timestamp using symphonia's native seeking (O(1) via seek table).
     pub fn seek_to(&mut self, pos: Duration) -> anyhow::Result<()> {
         let seek_to = SeekTo::Time {

@@ -89,7 +89,6 @@ impl AudioPlayer {
         self.total_duration = source.total_duration();
         
         sink.append(source);
-        sink.pause(); // Pause immediately, then resume to sync timing
         sink.play();
         
         self._stream = Some(stream);
@@ -187,7 +186,7 @@ impl AudioPlayer {
         self.seek_to(&path, new_pos)
     }
 
-    fn seek_to(&mut self, path: &str, pos: Duration) -> Result<()> {
+    pub fn seek_to(&mut self, path: &str, pos: Duration) -> Result<()> {
         // Stop current sink but reuse stream if possible
         if let Some(sink) = self.sink.take() {
             sink.stop();
