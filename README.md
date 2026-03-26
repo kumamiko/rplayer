@@ -8,11 +8,11 @@ Powered by GLM-5
 
 - 本地音乐播放，自动扫描媒体库
 - 支持 MP3、FLAC、WAV、OGG、AAC 格式
-- LRC 歌词同步显示
+- LRC 歌词同步显示（支持内嵌歌词）
 - Vim 风格快捷键操作
 - 多列播放列表（序号、歌名、歌手、专辑、时长，窄屏自动隐藏专辑列）
 - 实时搜索过滤（歌曲名/歌手/专辑/文件名）
-- 多种排序方式（歌曲名/歌手/专辑/文件夹）
+- 多种排序方式（歌曲名/歌手/专辑/文件夹），自动记忆排序设置
 - 多种播放模式（顺序/单曲循环/列表循环/随机）
 - 跨平台支持（Linux / Windows / macOS）
 - 自定义主题色（边框、标题、选中行背景）
@@ -151,6 +151,8 @@ cargo build --release
 music_folder = "/path/to/music"
 # 主题色，6位十六进制（如 "56B6C2"），留空使用默认颜色
 themecolor = ""
+# 排序方式：Title（歌曲名）、Artist（歌手）、Album（专辑）、Folder（文件夹）
+sort_mode = "Title"
 # 以下字段由程序自动维护，无需手动编辑
 last_song_path = ""
 last_position_secs = 0
@@ -176,7 +178,11 @@ last_position_secs = 0
 
 ## 歌词
 
-将 LRC 格式歌词文件放在音乐文件同目录下，文件名与音乐文件相同即可自动加载。
+歌词加载优先级：
+1. 外部 LRC 文件：与音乐文件同目录、同名、`.lrc` 后缀
+2. 内嵌歌词：从音频文件的元数据中读取（支持 ID3v2、Vorbis Comments 等）
+
+歌词格式需为标准 LRC 格式，支持时间标签同步显示。
 
 
 ## 缓存机制
@@ -195,8 +201,7 @@ last_position_secs = 0
 | 组件 | 技术 |
 |------|------|
 | TUI 框架 | [ratatui](https://github.com/ratatui/ratatui) + [crossterm](https://github.com/crossterm-rs/crossterm) |
-| 音频解码 | [rodio](https://github.com/RustAudio/rodio) + [symphonia](https://github.com/pdeljanov/Symphonia) |
-| 元数据解析 | [lofty](https://github.com/Serial-ATA/lofty) |
+| 音频解码与元数据解析 | [rodio](https://github.com/RustAudio/rodio) + [symphonia](https://github.com/pdeljanov/Symphonia) |
 | 并行处理 | [rayon](https://github.com/rayon-rs/rayon) |
 | 命令行解析 | [clap](https://github.com/clap-rs/clap) |
 
