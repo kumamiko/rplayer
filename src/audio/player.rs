@@ -18,6 +18,7 @@ pub struct AudioPlayer {
     _stream_handle: Option<OutputStreamHandle>,
     sink: Option<Sink>,
     start_time: Option<Instant>,
+    start_position: Duration,
     paused_at: Option<Duration>,
     is_paused: bool,
     current_path: Option<String>,
@@ -32,6 +33,7 @@ impl AudioPlayer {
             _stream_handle: None,
             sink: None,
             start_time: None,
+            start_position: Duration::ZERO,
             paused_at: None,
             is_paused: false,
             current_path: None,
@@ -94,6 +96,7 @@ impl AudioPlayer {
         self._stream_handle = Some(stream_handle);
         self.sink = Some(sink);
         self.start_time = Some(Instant::now());
+        self.start_position = Duration::ZERO;
         self.paused_at = None;
         self.is_paused = false;
         self.current_path = Some(path.to_string());
@@ -106,13 +109,10 @@ impl AudioPlayer {
             if self.is_paused {
                 sink.play();
                 self.is_paused = false;
-                // Adjust start time to account for pause duration
+                // Adjust start time and position to account for pause duration
                 if let Some(paused) = self.paused_at {
-                    if let Some(start) = self.start_time.as_mut() {
-                        if let Some(new_start) = Instant::now().checked_sub(paused) {
-                            *start = new_start;
-                        }
-                    }
+                    self.start_position = paused;
+                    self.start_time = Some(Instant::now());
                 }
             } else {
                 self.paused_at = Some(self.current_position());
@@ -129,6 +129,7 @@ impl AudioPlayer {
         self._stream = None;
         self._stream_handle = None;
         self.start_time = None;
+        self.start_position = Duration::ZERO;
         self.paused_at = None;
         self.is_paused = false;
     }
@@ -136,9 +137,9 @@ impl AudioPlayer {
     pub fn current_position(&self) -> Duration {
         if let Some(start) = self.start_time {
             if self.is_paused {
-                self.paused_at.unwrap_or(Duration::ZERO)
+                self.paused_at.unwrap_or(self.start_position)
             } else {
-                Instant::now().duration_since(start)
+                self.start_position + start.elapsed()
             }
         } else {
             Duration::ZERO
@@ -213,7 +214,8 @@ impl AudioPlayer {
         }
 
         self.sink = Some(sink);
-        self.start_time = Instant::now().checked_sub(pos);
+        self.start_time = Some(Instant::now());
+        self.start_position = pos;
         self.paused_at = if self.is_paused { Some(pos) } else { None };
         
         Ok(())
