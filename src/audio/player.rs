@@ -103,22 +103,30 @@ impl AudioPlayer {
         Ok(())
     }
     
-    pub fn toggle_pause(&mut self) {
-        if let Some(ref sink) = self.sink {
-            if self.is_paused {
-                sink.play();
-                self.is_paused = false;
-                // Adjust start time and position to account for pause duration
-                if let Some(paused) = self.paused_at {
-                    self.start_position = paused;
-                    self.start_time = Some(Instant::now());
-                }
-            } else {
-                self.paused_at = Some(self.current_position());
-                sink.pause();
-                self.is_paused = true;
+    /// Toggle pause. On pause, fully releases OutputStream to stop the cpal audio
+    /// thread (eliminating idle CPU usage). On resume, recreates the stream.
+    pub fn toggle_pause(&mut self) -> Result<()> {
+        if self.is_paused {
+            // Resume: recreate audio stream from saved position
+            let path = match &self.current_path {
+                Some(p) => p.clone(),
+                None => return Ok(()),
+            };
+            let pos = self.paused_at.unwrap_or(Duration::ZERO);
+            self.is_paused = false;
+            self.seek_to(&path, pos)?;
+        } else if self.sink.is_some() {
+            // Pause: save position and fully release stream to stop cpal thread
+            self.paused_at = Some(self.current_position());
+            if let Some(sink) = self.sink.take() {
+                sink.stop();
             }
+            self._stream = None;
+            self._stream_handle = None;
+            self.start_time = None;
+            self.is_paused = true;
         }
+        Ok(())
     }
     
     pub fn stop(&mut self) {
@@ -134,12 +142,10 @@ impl AudioPlayer {
     }
     
     pub fn current_position(&self) -> Duration {
-        if let Some(start) = self.start_time {
-            if self.is_paused {
-                self.paused_at.unwrap_or(self.start_position)
-            } else {
-                self.start_position + start.elapsed()
-            }
+        if self.is_paused {
+            self.paused_at.unwrap_or(Duration::ZERO)
+        } else if let Some(start) = self.start_time {
+            self.start_position + start.elapsed()
         } else {
             Duration::ZERO
         }
@@ -161,12 +167,6 @@ impl AudioPlayer {
     }
     
     pub fn seek_relative(&mut self, forward: bool, secs: u64) -> Result<()> {
-        let path = match &self.current_path {
-            Some(p) => p.clone(),
-            None => return Ok(()),
-        };
-        
-        // Calculate new position
         let current = self.current_position();
         let offset = Duration::from_secs(secs);
         let new_pos = if forward {
@@ -174,16 +174,24 @@ impl AudioPlayer {
         } else {
             current.saturating_sub(offset)
         };
-        
+
         // Clamp to valid range
         let new_pos = if let Some(total) = self.total_duration {
             new_pos.min(total)
         } else {
             new_pos
         };
-        
         let new_pos = new_pos.max(Duration::ZERO);
-        self.seek_to(&path, new_pos)
+
+        if self.is_paused {
+            // Just update saved position, don't create audio stream
+            self.paused_at = Some(new_pos);
+            self.start_position = new_pos;
+        } else {
+            let path = self.current_path.clone().unwrap();
+            self.seek_to(&path, new_pos)?;
+        }
+        Ok(())
     }
 
     pub fn seek_to(&mut self, path: &str, pos: Duration) -> Result<()> {
@@ -218,5 +226,24 @@ impl AudioPlayer {
         self.paused_at = if self.is_paused { Some(pos) } else { None };
         
         Ok(())
+    }
+
+    /// Set paused state without creating audio stream (for restoring on startup)
+    pub fn set_paused_state(&mut self, path: &str, duration: Duration, position: Duration) {
+        self.current_path = Some(path.to_string());
+        self.total_duration = Some(duration);
+        self.paused_at = Some(position);
+        self.start_position = position;
+        self.start_time = None;
+        self.is_paused = true;
+        self.sink = None;
+        self._stream = None;
+        self._stream_handle = None;
+    }
+}
+
+impl Drop for AudioPlayer {
+    fn drop(&mut self) {
+        self.stop();
     }
 }

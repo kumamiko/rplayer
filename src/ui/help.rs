@@ -65,10 +65,6 @@ impl Widget for HelpWidget {
                 Span::raw("暂停/继续"),
             ]),
             Line::from(vec![
-                Span::styled("  s            ", Style::default().fg(Color::Yellow)),
-                Span::raw("停止"),
-            ]),
-            Line::from(vec![
                 Span::styled("  n/p          ", Style::default().fg(Color::Yellow)),
                 Span::raw("下/上一曲"),
             ]),

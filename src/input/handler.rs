@@ -130,22 +130,20 @@ impl InputHandler {
                 }
             }
             KeyCode::Char('`') | KeyCode::Char('\'') => {
-                if let Some(song_idx) = app.current_song_index {
-                    if let Some(pos) = app.filtered_indices.iter().position(|&i| i == song_idx) {
-                        app.selected_index = pos;
-                        app.adjust_scroll();
-                    } else {
+                if app.current_song_index.is_none() {
+                    app.set_status("没有正在播放的歌曲");
+                } else {
+                    let prev = app.selected_index;
+                    app.scroll_to_playing();
+                    if app.selected_index == prev && !app.filtered_indices.is_empty() {
                         app.set_status("当前歌曲不在显示列表中");
                     }
-                } else {
-                    app.set_status("没有正在播放的歌曲");
                 }
             }
 
             // Playback
             KeyCode::Enter => app.play_selected(audio_player, lyrics_manager),
-            KeyCode::Char(' ') => app.toggle_pause(audio_player),
-            KeyCode::Char('s') => app.stop(audio_player),
+            KeyCode::Char(' ') => app.toggle_pause(audio_player)?,
             KeyCode::Char('n') => app.next_song(audio_player, lyrics_manager),
             KeyCode::Char('p') => app.prev_song(audio_player, lyrics_manager),
             
@@ -177,8 +175,10 @@ impl InputHandler {
                 app.search_query.clear();
                 app.search_cursor = 0;
                 app.filtered_indices = (0..app.songs.len()).collect();
-                app.selected_index = 0;
-                app.scroll_offset = 0;
+                if !app.scroll_to_playing() {
+                    app.selected_index = 0;
+                    app.scroll_offset = 0;
+                }
                 app.set_status("已清除搜索");
             }
             
@@ -232,8 +232,10 @@ impl InputHandler {
                 app.search_query.clear();
                 app.search_cursor = 0;
                 app.filtered_indices = (0..app.songs.len()).collect();
-                app.selected_index = 0;
-                app.scroll_offset = 0;
+                if !app.scroll_to_playing() {
+                    app.selected_index = 0;
+                    app.scroll_offset = 0;
+                }
                 app.mode = Mode::Normal;
                 app.status_message.clear();
                 app.status_expiry = None;

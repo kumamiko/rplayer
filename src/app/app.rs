@@ -55,6 +55,9 @@ pub struct App {
     // Background scanning
     scanning: bool,
     scan_rx: Option<Receiver<ScanMessage>>,
+    
+    // UI dirty flag: redraw only when true or playing
+    dirty: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,6 +143,7 @@ impl Default for App {
             count: None,
             scanning: false,
             scan_rx: None,
+            dirty: true,
         }
     }
 }
@@ -198,7 +202,7 @@ impl App {
     
     fn main_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -> Result<()> {
         let mut last_tick = Instant::now();
-        let tick_rate = Duration::from_millis(100);
+        let tick_rate = Duration::from_millis(500);
         
         let mut audio_player = AudioPlayer::new()?;
         let mut lyrics_manager = LyricsManager::new();
@@ -207,7 +211,7 @@ impl App {
         self.start_scan();
 
         // Restore last playback state
-        let _restored = self.restore_playback_state(&mut audio_player);
+        let _restored = self.restore_playback_state(&mut audio_player, &mut lyrics_manager);
         if _restored {
             self.set_status("已恢复上次播放");
         }
@@ -216,27 +220,13 @@ impl App {
             // Poll background scan results
             self.poll_scan();
             
-            // Draw UI
-            terminal.draw(|f| {
-                let mut ui = Ui::new(self, &lyrics_manager);
-                ui.render(f);
-            })?;
-            
-            // Handle events
-            let timeout = tick_rate.saturating_sub(last_tick.elapsed());
-            if crossterm::event::poll(timeout)? {
-                if let Event::Key(key) = event::read()? {
-                    // Only handle key press events (ignore release)
-                    if key.kind == KeyEventKind::Press {
-                        let handler = InputHandler::new();
-                        handler.handle(self, &mut audio_player, &mut lyrics_manager, key)?;
-                    }
+            // Check if status message expired
+            if let Some(expiry) = self.status_expiry {
+                if Instant::now() >= expiry {
+                    self.status_message.clear();
+                    self.status_expiry = None;
+                    self.dirty = true;
                 }
-            }
-            
-            // Update current playback position from audio player
-            if self.is_playing {
-                self.current_pos = audio_player.current_position();
             }
             
             // Check if song finished (was playing but now empty)
@@ -244,6 +234,43 @@ impl App {
                 self.is_playing = false;
                 // Auto-play next song
                 self.next_song(&mut audio_player, &mut lyrics_manager);
+            }
+            
+            // Draw UI only when dirty or playing (progress bar needs updates)
+            if self.dirty || self.is_playing || self.scanning {
+                // Update current playback position before draw
+                if self.is_playing {
+                    self.current_pos = audio_player.current_position();
+                }
+                
+                terminal.draw(|f| {
+                    let mut ui = Ui::new(self, &lyrics_manager);
+                    ui.render(f);
+                })?;
+                self.dirty = false;
+            }
+            
+            // Handle events with adaptive timeout
+            let timeout = if self.is_playing || self.scanning {
+                // Active: short timeout for progress/scan updates
+                tick_rate.saturating_sub(last_tick.elapsed())
+            } else if let Some(expiry) = self.status_expiry {
+                // Pending status expiry: wake up when it expires
+                expiry.saturating_duration_since(Instant::now())
+            } else {
+                // Truly idle: block until any event (max ~24 days, fits in c_int ms)
+                Duration::from_millis(i32::MAX as u64)
+            };
+            
+            if crossterm::event::poll(timeout)? {
+                if let Event::Key(key) = event::read()? {
+                    // Only handle key press events (ignore release)
+                    if key.kind == KeyEventKind::Press {
+                        self.dirty = true;
+                        let handler = InputHandler::new();
+                        handler.handle(self, &mut audio_player, &mut lyrics_manager, key)?;
+                    }
+                }
             }
             
             // Tick
@@ -377,6 +404,7 @@ impl App {
                 ScanMessage::Progress { found } => {
                     self.status_message = format!("正在扫描媒体库... 已发现 {} 首", found);
                     self.status_expiry = None;
+                    self.dirty = true;
                 }
                 ScanMessage::Done { songs, cached_count, new_count, updated_count } => {
                     // Preserve currently playing song and selected song
@@ -406,8 +434,10 @@ impl App {
                                 self.adjust_scroll();
                             }
                         }
+                    } else {
+                        self.scroll_to_playing();
                     }
-                    
+
                     if self.selected_index >= self.filtered_indices.len() {
                         self.selected_index = 0;
                         self.scroll_offset = 0;
@@ -428,6 +458,7 @@ impl App {
                     } else {
                         self.status_message = format!("扫描完成: {} 首歌曲", self.songs.len());
                     }
+                    self.dirty = true;
                     return;
                 }
             }
@@ -522,6 +553,12 @@ impl App {
             new_count,
             updated_count,
         });
+
+        // Shut down rayon thread pool to free idle worker threads
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(0)
+            .build_global()
+            .ok();
     }
     
     /// Get cache file path (unique per music folder)
@@ -616,12 +653,13 @@ impl App {
         }
     }
     
-    pub fn toggle_pause(&mut self, audio_player: &mut AudioPlayer) {
+    pub fn toggle_pause(&mut self, audio_player: &mut AudioPlayer) -> Result<()> {
         if self.current_song_index.is_some() {
-            audio_player.toggle_pause();
+            audio_player.toggle_pause()?;
             self.is_playing = !self.is_playing;
             self.status_message = if self.is_playing { "播放" } else { "暂停" }.to_string();
         }
+        Ok(())
     }
     
     pub fn stop(&mut self, audio_player: &mut AudioPlayer) {
@@ -762,6 +800,18 @@ impl App {
         }
     }
 
+    /// Scroll to the currently playing song. Returns true if found.
+    pub fn scroll_to_playing(&mut self) -> bool {
+        if let Some(song_idx) = self.current_song_index {
+            if let Some(pos) = self.filtered_indices.iter().position(|&i| i == song_idx) {
+                self.selected_index = pos;
+                self.adjust_scroll();
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn apply_filter(&mut self) {
         self.filtered_indices.clear();
 
@@ -882,6 +932,7 @@ impl App {
     pub fn set_status(&mut self, msg: impl Into<String>) {
         self.status_message = msg.into();
         self.status_expiry = Some(Instant::now() + Duration::from_secs(3));
+        self.dirty = true;
     }
     
     pub fn quit(&mut self, audio_player: &AudioPlayer) {
@@ -910,7 +961,7 @@ impl App {
     }
 
     /// Try to restore last playback state. Returns true if restored.
-    pub fn restore_playback_state(&mut self, audio_player: &mut AudioPlayer) -> bool {
+    pub fn restore_playback_state(&mut self, audio_player: &mut AudioPlayer, lyrics_manager: &mut LyricsManager) -> bool {
         if self.config.last_song_path.is_empty() {
             return false;
         }
@@ -929,27 +980,18 @@ impl App {
 
         let song = &self.songs[song_idx];
         let pos_secs = self.config.last_position_secs;
+        let pos = Duration::from_secs(pos_secs);
 
-        if let Ok(()) = audio_player.play(&song.path) {
-            self.current_song_index = Some(song_idx);
-            self.is_playing = false;
-            self.duration = song.duration;
-            // Seek to saved position if needed
-            if pos_secs > 0 {
-                self.current_pos = Duration::from_secs(pos_secs);
-                let _ = audio_player.seek_to(&song.path, Duration::from_secs(pos_secs));
-            } else {
-                self.current_pos = Duration::ZERO;
-            }
-            audio_player.toggle_pause();
-            if let Some(list_pos) = self.filtered_indices.iter().position(|&i| i == song_idx) {
-                self.selected_index = list_pos;
-                self.adjust_scroll();
-            }
-            return true;
-        }
+        // Set paused state without creating audio stream (avoids cpal idle CPU usage)
+        audio_player.set_paused_state(&song.path, song.duration, pos);
+        lyrics_manager.load(&song.path);
 
-        false
+        self.current_song_index = Some(song_idx);
+        self.is_playing = false;
+        self.duration = song.duration;
+        self.current_pos = pos;
+        self.scroll_to_playing();
+        true
     }
 }
 
