@@ -2,6 +2,8 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::app::SortMode;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Music folder to scan
@@ -15,6 +17,9 @@ pub struct Config {
     /// Theme color in hex (e.g. "56B6C2" or "#56B6C2"), affects borders, titles, and selection
     #[serde(default)]
     pub themecolor: String,
+    /// Last sort mode for the playlist
+    #[serde(default)]
+    pub sort_mode: SortMode,
 }
 
 impl Default for Config {
@@ -24,6 +29,7 @@ impl Default for Config {
             last_song_path: String::new(),
             last_position_secs: 0,
             themecolor: String::new(),
+            sort_mode: SortMode::default(),
         }
     }
 }

@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 /// Input mode for Vim-style keybindings
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Mode {
@@ -63,11 +65,11 @@ impl SearchMode {
 }
 
 /// Sorting mode for the playlist
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum SortMode {
     /// Sort by song title (default)
     #[default]
-    Filename,
+    Title,
     /// Sort by artist
     Artist,
     /// Sort by album
@@ -77,20 +79,20 @@ pub enum SortMode {
 }
 
 impl SortMode {
-    /// Cycle to next sort mode: Filename -> Artist -> Album -> Folder -> Filename
+    /// Cycle to next sort mode: Title -> Artist -> Album -> Folder -> Title
     pub fn next(&self) -> Self {
         match self {
-            SortMode::Filename => SortMode::Artist,
+            SortMode::Title => SortMode::Artist,
             SortMode::Artist => SortMode::Album,
             SortMode::Album => SortMode::Folder,
-            SortMode::Folder => SortMode::Filename,
+            SortMode::Folder => SortMode::Title,
         }
     }
 
     /// Get display string
     pub fn as_str(&self) -> &'static str {
         match self {
-            SortMode::Filename => "歌曲名",
+            SortMode::Title => "歌曲名",
             SortMode::Artist => "歌手",
             SortMode::Album => "专辑",
             SortMode::Folder => "文件夹",

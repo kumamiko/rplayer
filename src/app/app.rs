@@ -143,8 +143,10 @@ impl Default for App {
 impl App {
     pub fn new(music_dir: Option<String>) -> Result<Self> {
         let config = Config::load()?;
+        let sort_mode = config.sort_mode;
         let mut app = Self {
             config,
+            sort_mode,
             ..Self::default()
         };
         if let Some(dir) = music_dir {
@@ -156,6 +158,8 @@ impl App {
         if let Some(cache) = app.load_cache(&music_dir_str) {
             app.songs = cache.songs;
             app.filtered_indices = (0..app.songs.len()).collect();
+            // Apply saved sort mode
+            app.sort_songs();
             app.status_message = format!("发现 {} 首歌曲", app.songs.len());
         }
         Ok(app)
@@ -379,17 +383,33 @@ impl App {
                     self.status_expiry = None;
                 }
                 ScanMessage::Done { songs, cached_count, new_count, updated_count } => {
-                    // Preserve currently playing song
+                    // Preserve currently playing song and selected song
                     let playing_path = self.current_song_index
                         .and_then(|idx| self.songs.get(idx))
+                        .map(|s| s.path.clone());
+                    let selected_path = self.filtered_indices.get(self.selected_index)
+                        .and_then(|&idx| self.songs.get(idx))
                         .map(|s| s.path.clone());
                     
                     self.songs = songs;
                     self.filtered_indices = (0..self.songs.len()).collect();
                     
+                    // Apply saved sort mode
+                    self.sort_songs();
+                    
                     // Restore current song index
                     if let Some(ref path) = playing_path {
                         self.current_song_index = self.songs.iter().position(|s| s.path == *path);
+                    }
+                    
+                    // Restore selected index
+                    if let Some(ref path) = selected_path {
+                        if let Some(song_idx) = self.songs.iter().position(|s| s.path == *path) {
+                            if let Some(list_pos) = self.filtered_indices.iter().position(|&i| i == song_idx) {
+                                self.selected_index = list_pos;
+                                self.adjust_scroll();
+                            }
+                        }
                     }
                     
                     if self.selected_index >= self.filtered_indices.len() {
@@ -789,7 +809,7 @@ impl App {
             let sa = &songs[a];
             let sb = &songs[b];
             match sort_mode {
-                SortMode::Filename => {
+                SortMode::Title => {
                     let cmp = sa.title.to_lowercase().cmp(&sb.title.to_lowercase());
                     if cmp != std::cmp::Ordering::Equal {
                         cmp
@@ -869,21 +889,21 @@ impl App {
 
     /// Save current playback position to config for restore on next launch
     fn save_playback_state(&mut self, audio_player: &AudioPlayer) {
+        // Always save sort mode
+        self.config.sort_mode = self.sort_mode;
+        
         if let Some(song_idx) = self.current_song_index {
             if let Some(song) = self.songs.get(song_idx) {
                 let pos = audio_player.current_position();
                 self.config.last_song_path = song.path.clone();
                 self.config.last_position_secs = pos.as_secs();
-                let _ = self.config.save();
             }
         } else {
             // Not playing anything, clear saved state
-            if !self.config.last_song_path.is_empty() {
-                self.config.last_song_path.clear();
-                self.config.last_position_secs = 0;
-                let _ = self.config.save();
-            }
+            self.config.last_song_path.clear();
+            self.config.last_position_secs = 0;
         }
+        let _ = self.config.save();
     }
 
     /// Try to restore last playback state. Returns true if restored.
