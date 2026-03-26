@@ -59,23 +59,53 @@ impl LyricsManager {
     }
     
     fn load_embedded_lyrics(&self, song_path: &str) -> Option<String> {
-        use lofty::probe::Probe;
-        use lofty::file::TaggedFileExt;
-        use lofty::tag::{ItemKey, ItemValue};
-        
+        use symphonia::core::meta::{MetadataOptions, StandardTagKey, Value};
+        use symphonia::core::probe::Hint;
+        use symphonia::default::get_probe;
+
         let path = std::path::Path::new(song_path);
-        let tagged_file = Probe::open(path).ok()?.read().ok()?;
-        let tag = tagged_file.primary_tag()?;
-        
-        // Look for lyrics in tag items (ItemKey::Lyrics covers USLT, ©lyr, LYRICS, etc.)
-        for item in tag.items() {
-            if *item.key() == ItemKey::Lyrics {
-                if let ItemValue::Text(text) = item.value() {
-                    return Some(text.clone());
+        let file = std::fs::File::open(path).ok()?;
+        let mss = symphonia::core::io::MediaSourceStream::new(Box::new(file), Default::default());
+
+        let mut hint = Hint::new();
+        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            hint.with_extension(ext);
+        }
+
+        let mut probed = get_probe()
+            .format(&hint, mss, &Default::default(), &MetadataOptions::default())
+            .ok()?;
+        let mut format_reader = probed.format;
+
+        // 1. Check probed metadata first (e.g., ID3v2 tags in MP3 files)
+        if let Some(probed_meta) = probed.metadata.get() {
+            if let Some(rev) = probed_meta.current() {
+                for tag in rev.tags() {
+                    if tag.std_key == Some(StandardTagKey::Lyrics) {
+                        if let Value::String(text) = &tag.value {
+                            return Some(text.clone());
+                        }
+                    }
                 }
             }
         }
-        
+
+        // 2. Check container metadata (e.g., Vorbis Comments in FLAC)
+        let mut metadata = format_reader.metadata();
+        while !metadata.is_latest() {
+            metadata.pop();
+        }
+
+        if let Some(rev) = metadata.current() {
+            for tag in rev.tags() {
+                if tag.std_key == Some(StandardTagKey::Lyrics) {
+                    if let Value::String(text) = &tag.value {
+                        return Some(text.clone());
+                    }
+                }
+            }
+        }
+
         None
     }
     

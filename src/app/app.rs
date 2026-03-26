@@ -949,45 +949,93 @@ fn get_file_mtime(path: &std::path::Path) -> u64 {
         .unwrap_or(0)
 }
 
-/// Parse a song file's metadata
+/// Parse a song file's metadata using Symphonia
 fn parse_song(path: &str) -> Result<Song> {
-    use lofty::probe::Probe;
-    use lofty::file::{TaggedFileExt, AudioFile};
-    use lofty::tag::Accessor;
-    
+    use symphonia::core::meta::{MetadataOptions, StandardTagKey, Value};
+    use symphonia::core::probe::Hint;
+    use symphonia::default::get_probe;
+
     let file_path = std::path::Path::new(path);
-    let tagged_file = Probe::open(file_path)?.read()?;
-    let tag = tagged_file.primary_tag();
-    let properties = tagged_file.properties();
-    
-    let duration = properties.duration();
     let mtime = get_file_mtime(file_path);
-    
-    let (title, artist, album) = if let Some(tag) = tag {
-        (
-            tag.title()
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| file_path.file_stem().unwrap().to_str().unwrap_or("Unknown").to_string()),
-            tag.artist()
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "未知歌手".to_string()),
-            tag.album()
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "未知专辑".to_string()),
-        )
-    } else {
-        (
-            file_path.file_stem().unwrap().to_str().unwrap_or("Unknown").to_string(),
-            "未知歌手".to_string(),
-            "未知专辑".to_string(),
-        )
+    let stem = file_path.file_stem().unwrap().to_str().unwrap_or("Unknown").to_string();
+
+    let file = std::fs::File::open(file_path)?;
+    let mss = symphonia::core::io::MediaSourceStream::new(Box::new(file), Default::default());
+
+    let mut hint = Hint::new();
+    if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+        hint.with_extension(ext);
+    }
+
+    let mut probed = get_probe()
+        .format(&hint, mss, &Default::default(), &MetadataOptions::default())?;
+    let mut format_reader = probed.format;
+
+    // Get duration from track
+    let duration = format_reader.tracks().iter()
+        .find(|t| t.codec_params.codec != symphonia::core::codecs::CODEC_TYPE_NULL)
+        .and_then(|track| {
+            track.codec_params.time_base
+                .zip(track.codec_params.n_frames)
+                .map(|(tb, frames)| {
+                    let time = tb.calc_time(frames);
+                    std::time::Duration::from_secs_f64(time.seconds as f64 + f64::from(time.frac))
+                })
+        })
+        .unwrap_or(std::time::Duration::ZERO);
+
+    // Collect tags from all metadata sources (upsert merge)
+    let mut title = None;
+    let mut artist = None;
+    let mut album = None;
+
+    // Helper to extract string value from tag
+    let get_string = |tag: &symphonia::core::meta::Tag| -> Option<String> {
+        match &tag.value {
+            Value::String(s) => Some(s.clone()),
+            _ => None,
+        }
     };
-    
+
+    // 1. Read probed metadata (e.g., ID3v2 tags in MP3 files - stored BEFORE container)
+    if let Some(probed_meta) = probed.metadata.get() {
+        if let Some(rev) = probed_meta.current() {
+            for tag in rev.tags() {
+                if let Some(std_key) = tag.std_key {
+                    match std_key {
+                        StandardTagKey::TrackTitle if title.is_none() => title = get_string(tag),
+                        StandardTagKey::Artist if artist.is_none() => artist = get_string(tag),
+                        StandardTagKey::Album if album.is_none() => album = get_string(tag),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Read container metadata (e.g., Vorbis Comments in FLAC, iTunes metadata in M4A)
+    let mut container_meta = format_reader.metadata();
+    while !container_meta.is_latest() {
+        container_meta.pop();
+    }
+    if let Some(rev) = container_meta.current() {
+        for tag in rev.tags() {
+            if let Some(std_key) = tag.std_key {
+                match std_key {
+                    StandardTagKey::TrackTitle if title.is_none() => title = get_string(tag),
+                    StandardTagKey::Artist if artist.is_none() => artist = get_string(tag),
+                    StandardTagKey::Album if album.is_none() => album = get_string(tag),
+                    _ => {}
+                }
+            }
+        }
+    }
+
     Ok(Song {
         path: path.to_string(),
-        title,
-        artist,
-        album,
+        title: title.unwrap_or_else(|| stem),
+        artist: artist.unwrap_or_else(|| "未知歌手".to_string()),
+        album: album.unwrap_or_else(|| "未知专辑".to_string()),
         duration,
         mtime,
     })
