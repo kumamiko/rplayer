@@ -51,13 +51,11 @@ impl<'a> Widget for LyricsWidget<'a> {
                                 ),
                                 Span::styled(
                                     text[1].clone(),
-                                    Style::default()
-                                        .fg(Color::Gray)
-                                        .add_modifier(Modifier::BOLD)
+                                    Style::default().fg(Color::Gray)
                                 ),
                             ]),
                         ]
-                    } else {
+                    } else if !text.is_empty() {
                         // Single language: show current + next line preview
                         let mut result = vec![
                             Line::from(vec![
@@ -82,6 +80,8 @@ impl<'a> Widget for LyricsWidget<'a> {
                             }
                         }
                         result
+                    } else {
+                        vec![Line::from(Span::styled("♪ No lyrics ♪", Style::default().fg(Color::DarkGray)))]
                     }
                 }
             }

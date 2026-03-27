@@ -78,17 +78,33 @@ pub fn parse_lrc(content: &str) -> BTreeMap<Duration, LyricsLine> {
                     });
                 }
             }
+        } else if has_inline_word_timestamps(text) {
+            // Inline word-by-word format: text[mm:ss.xx]text[mm:ss.xx]text...
+            let line_time = *timestamps.first().unwrap();
+            let words = parse_inline_timed_words(line_time, text);
+            if !words.is_empty() {
+                for ts in timestamps {
+                    lyrics.insert(ts, LyricsLine::Timed {
+                        time: ts,
+                        words: words.clone(),
+                    });
+                }
+            }
         } else {
-            // Standard LRC: plain text line
-            let text_str = text.to_string();
+            // Standard LRC: plain text line (may contain "/" for inline bilingual)
+            let parts: Vec<&str> = text.splitn(2, " / ").collect();
             for ts in timestamps {
                 lyrics.entry(ts).or_insert_with(|| LyricsLine::Plain {
                     time: ts,
                     text: Vec::new(),
                 });
-                // Append to existing or new entry
                 if let Some(LyricsLine::Plain { text, .. }) = lyrics.get_mut(&ts) {
-                    text.push(text_str.clone());
+                    for part in &parts {
+                        let trimmed = part.trim();
+                        if !trimmed.is_empty() {
+                            text.push(trimmed.to_string());
+                        }
+                    }
                 }
             }
         }
@@ -146,6 +162,80 @@ fn parse_timed_words(text: &str) -> Vec<LyricsWord> {
     }
 
     // Don't forget the last word
+    if !current_text.is_empty() {
+        if let Some(start) = current_start {
+            words.push(LyricsWord {
+                start,
+                text: current_text,
+            });
+        }
+    }
+
+    words
+}
+
+/// Check if text contains inline [mm:ss.xx] timestamps (word-by-word format).
+fn has_inline_word_timestamps(text: &str) -> bool {
+    let mut search_from = 0;
+    while let Some(start) = text[search_from..].find('[') {
+        let abs_start = search_from + start;
+        if let Some(end) = text[abs_start..].find(']') {
+            let tag = &text[abs_start + 1..abs_start + end];
+            if parse_timestamp(tag).is_ok() {
+                return true;
+            }
+            search_from = abs_start + end + 1;
+        } else {
+            break;
+        }
+    }
+    false
+}
+
+/// Parse inline [mm:ss.xx]word[mm:ss.xx]word... format.
+/// `line_time` is used as the start time for the first word segment.
+fn parse_inline_timed_words(line_time: Duration, text: &str) -> Vec<LyricsWord> {
+    let mut words = Vec::new();
+    let mut remaining = text;
+    let mut current_start = Some(line_time);
+    let mut current_text = String::new();
+
+    while !remaining.is_empty() {
+        if let Some(tag_start) = remaining.find('[') {
+            let before = &remaining[..tag_start];
+            if !before.is_empty() {
+                current_text.push_str(before);
+            }
+
+            if let Some(tag_end) = remaining[tag_start..].find(']') {
+                let tag_content = &remaining[tag_start + 1..tag_start + tag_end];
+                remaining = &remaining[tag_start + tag_end + 1..];
+
+                if let Ok(ts) = parse_timestamp(tag_content) {
+                    if !current_text.is_empty() {
+                        if let Some(start) = current_start.take() {
+                            words.push(LyricsWord {
+                                start,
+                                text: std::mem::take(&mut current_text),
+                            });
+                        }
+                    }
+                    current_start = Some(ts);
+                } else {
+                    current_text.push('[');
+                    current_text.push_str(tag_content);
+                    current_text.push(']');
+                }
+            } else {
+                current_text.push_str(&remaining[tag_start..]);
+                break;
+            }
+        } else {
+            current_text.push_str(remaining);
+            break;
+        }
+    }
+
     if !current_text.is_empty() {
         if let Some(start) = current_start {
             words.push(LyricsWord {
@@ -235,6 +325,24 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_bilingual_inline_lrc() {
+        let lrc = r#"
+[00:14.71]甘い潮风がまた手招きしてる / 香甜的海风 又开始对我招手
+[00:22.77]夕凪に响く 「待ってよ」 / 在夕凪中回响著"等等我喔"
+"#;
+        let lyrics = parse_lrc(lrc);
+        assert_eq!(lyrics.len(), 2);
+        match lyrics.get(&Duration::from_millis(14710)) {
+            Some(LyricsLine::Plain { text, .. }) => {
+                assert_eq!(text.len(), 2);
+                assert_eq!(text[0], "甘い潮风がまた手招きしてる");
+                assert_eq!(text[1], "香甜的海风 又开始对我招手");
+            }
+            _ => panic!("Expected Plain line"),
+        }
+    }
+
+    #[test]
     fn test_parse_enhanced_lrc() {
         let lrc = "[00:14.71]<00:14.71>甘<00:14.95>い<00:15.10>潮<00:15.30>风<00:15.55>が<00:15.80>ま<00:16.00>た<00:16.20>手<00:16.45>招<00:16.70>き<00:16.95>し<00:17.20>て<00:17.45>る";
         let lyrics = parse_lrc(lrc);
@@ -264,9 +372,9 @@ mod tests {
         let lyrics = parse_lrc(lrc);
         assert_eq!(lyrics.len(), 3);
 
-        assert!(lyrics.get(&Duration::from_millis(14710)).unwrap().is_timed());
-        assert!(lyrics.get(&Duration::from_millis(17200)).unwrap().is_timed());
-        assert!(lyrics.get(&Duration::from_millis(22000)).unwrap().is_timed());
+        assert!(matches!(lyrics.get(&Duration::from_millis(14710)), Some(LyricsLine::Timed { .. })));
+        assert!(matches!(lyrics.get(&Duration::from_millis(17200)), Some(LyricsLine::Timed { .. })));
+        assert!(matches!(lyrics.get(&Duration::from_millis(22000)), Some(LyricsLine::Timed { .. })));
     }
 
     #[test]
@@ -282,6 +390,57 @@ mod tests {
                 assert_eq!(words[1].start, Duration::from_millis(10500));
                 assert_eq!(words[2].text, "!");
                 assert_eq!(words[2].start, Duration::from_millis(11000));
+            }
+            _ => panic!("Expected Timed line"),
+        }
+    }
+
+    #[test]
+    fn test_parse_inline_bracket_word_timestamps() {
+        let lrc = "[00:14.71]甘い[00:14.95]潮风[00:15.10]がまた[00:16.00]手招きしてる";
+        let lyrics = parse_lrc(lrc);
+        assert_eq!(lyrics.len(), 1);
+        match lyrics.get(&Duration::from_millis(14710)) {
+            Some(LyricsLine::Timed { words, .. }) => {
+                assert_eq!(words.len(), 4);
+                assert_eq!(words[0].text, "甘い");
+                assert_eq!(words[0].start, Duration::from_millis(14710));
+                assert_eq!(words[1].text, "潮风");
+                assert_eq!(words[1].start, Duration::from_millis(14950));
+                assert_eq!(words[2].text, "がまた");
+                assert_eq!(words[2].start, Duration::from_millis(15100));
+                assert_eq!(words[3].text, "手招きしてる");
+                assert_eq!(words[3].start, Duration::from_millis(16000));
+            }
+            _ => panic!("Expected Timed line"),
+        }
+    }
+
+    #[test]
+    fn test_inline_bracket_does_not_affect_plain_lrc() {
+        let lrc = "[00:14.71]甘い潮风がまた手招きしてる";
+        let lyrics = parse_lrc(lrc);
+        assert_eq!(lyrics.len(), 1);
+        match lyrics.get(&Duration::from_millis(14710)) {
+            Some(LyricsLine::Plain { text, .. }) => {
+                assert_eq!(text, &vec!["甘い潮风がまた手招きしてる".to_string()]);
+            }
+            _ => panic!("Expected Plain line"),
+        }
+    }
+
+    #[test]
+    fn test_inline_bracket_single_tag_is_timed() {
+        // 1 inline [mm:ss.xx] tag → treated as Timed
+        let lrc = "[00:14.71]甘い潮风[00:15.00]がまた";
+        let lyrics = parse_lrc(lrc);
+        match lyrics.get(&Duration::from_millis(14710)) {
+            Some(LyricsLine::Timed { words, .. }) => {
+                assert_eq!(words.len(), 2);
+                assert_eq!(words[0].text, "甘い潮风");
+                assert_eq!(words[0].start, Duration::from_millis(14710));
+                assert_eq!(words[1].text, "がまた");
+                assert_eq!(words[1].start, Duration::from_millis(15000));
             }
             _ => panic!("Expected Timed line"),
         }
