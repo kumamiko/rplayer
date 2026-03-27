@@ -202,7 +202,7 @@ impl App {
     
     fn main_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -> Result<()> {
         let mut last_tick = Instant::now();
-        let tick_rate = Duration::from_millis(500);
+        let tick_rate = Duration::from_millis(200);
         
         let mut audio_player = AudioPlayer::new()?;
         let mut lyrics_manager = LyricsManager::new();
@@ -239,7 +239,7 @@ impl App {
             // Draw UI only when dirty or playing (progress bar needs updates)
             if self.dirty || self.is_playing || self.scanning {
                 // Update current playback position before draw
-                if self.is_playing {
+                if self.current_song_index.is_some() {
                     self.current_pos = audio_player.current_position();
                 }
                 
