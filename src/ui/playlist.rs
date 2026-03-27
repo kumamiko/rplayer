@@ -52,6 +52,7 @@ impl<'a> Widget for PlaylistWidget<'a> {
         };
 
         let theme_bg = self.app.theme_color();
+        let theme_title = self.app.theme_color_bright();
         let items: Vec<ListItem> = self.app.filtered_indices
             .iter()
             .enumerate()
@@ -71,10 +72,14 @@ impl<'a> Widget for PlaylistWidget<'a> {
 
                 let duration = utils::format_duration_wide(song.duration);
                 
-                let prefix = if is_playing {
-                    if self.app.is_playing { "▶" } else { "⏸" }
+                let (prefix, prefix_color) = if is_playing {
+                    if self.app.is_playing {
+                        ("▶", theme_title.unwrap_or(Color::Cyan))
+                    } else {
+                        ("⏸", Color::Yellow)
+                    }
                 } else {
-                    " "
+                    (" ", Color::Green)
                 };
                 
                 // Index (1-based)
@@ -91,7 +96,7 @@ impl<'a> Widget for PlaylistWidget<'a> {
                 };
 
                 let mut spans = vec![
-                    Span::styled(format!("{} ", prefix), Style::default().fg(Color::Green)),
+                    Span::styled(format!("{} ", prefix), Style::default().fg(prefix_color)),
                     Span::styled(format!("{} ", index_str), Style::default().fg(Color::DarkGray)),
                     Span::styled(format!("{} ", title), style),
                     Span::styled(format!("{} ", artist), Style::default().fg(Color::DarkGray)),

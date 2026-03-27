@@ -85,12 +85,12 @@ impl InputHandler {
             KeyCode::Char('h') => {
                 app.count = None;
                 audio_player.seek_relative(false, 10)?;
-                app.set_status("⏪ -10秒");
+                app.set_status("<< -10秒");
             }
             KeyCode::Char('l') => {
                 app.count = None;
                 audio_player.seek_relative(true, 10)?;
-                app.set_status("⏩ +10秒");
+                app.set_status(">> +10秒");
             }
             KeyCode::Char('g') => {
                 let count = app.consume_count();
@@ -185,7 +185,7 @@ impl InputHandler {
             // Toggle play mode
             KeyCode::Char('r') if key.modifiers == KeyModifiers::NONE => {
                 app.play_mode = app.play_mode.next();
-                app.set_status(format!("{} {}", app.play_mode.icon(), app.play_mode.as_str()));
+                app.set_status(app.play_mode.as_str().to_string());
             }
 
             // Toggle sort mode

@@ -109,6 +109,10 @@ impl LyricsManager {
         None
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.lyrics.is_empty()
+    }
+
     /// Get current and next lyrics line for karaoke display
     /// Returns (current_line, next_line) as references
     pub fn get_current_and_next(&self, position: Duration) -> (Option<&LyricsLine>, Option<&LyricsLine>) {

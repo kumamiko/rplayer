@@ -13,11 +13,12 @@ pub struct LyricsWidget<'a> {
     position: Duration,
     theme_border: Color,
     theme_title: Color,
+    has_lyrics: bool,
 }
 
 impl<'a> LyricsWidget<'a> {
     pub fn new(lyrics: &'a LyricsManager, position: Duration, theme_border: Color, theme_title: Color) -> Self {
-        Self { lyrics, position, theme_border, theme_title }
+        Self { lyrics, position, theme_border, theme_title, has_lyrics: !lyrics.is_empty() }
     }
 }
 
@@ -32,44 +33,26 @@ impl<'a> Widget for LyricsWidget<'a> {
                     if text.len() >= 2 {
                         // Bilingual: show original + translation
                         vec![
-                            Line::from(vec![
-                                Span::styled(
-                                    "♪ ",
-                                    Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
-                                ),
-                                Span::styled(
-                                    text[0].clone(),
-                                    Style::default()
-                                        .fg(Color::White)
-                                        .add_modifier(Modifier::BOLD)
-                                ),
-                            ]),
-                            Line::from(vec![
-                                Span::styled(
-                                    "♪ ",
-                                    Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
-                                ),
-                                Span::styled(
-                                    text[1].clone(),
-                                    Style::default().fg(Color::Gray)
-                                ),
-                            ]),
+                            Line::from(Span::styled(
+                                text[0].clone(),
+                                Style::default()
+                                    .fg(Color::White)
+                                    .add_modifier(Modifier::BOLD)
+                            )),
+                            Line::from(Span::styled(
+                                text[1].clone(),
+                                Style::default().fg(Color::Gray)
+                            )),
                         ]
                     } else if !text.is_empty() {
                         // Single language: show current + next line preview
                         let mut result = vec![
-                            Line::from(vec![
-                                Span::styled(
-                                    "♪ ",
-                                    Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
-                                ),
-                                Span::styled(
-                                    text[0].clone(),
-                                    Style::default()
-                                        .fg(Color::White)
-                                        .add_modifier(Modifier::BOLD)
-                                ),
-                            ]),
+                            Line::from(Span::styled(
+                                text[0].clone(),
+                                Style::default()
+                                    .fg(Color::White)
+                                    .add_modifier(Modifier::BOLD)
+                            )),
                         ];
                         if let Some(LyricsLine::Plain { text: next_text, .. }) = next_line {
                             if !next_text.is_empty() {
@@ -81,7 +64,7 @@ impl<'a> Widget for LyricsWidget<'a> {
                         }
                         result
                     } else {
-                        vec![Line::from(Span::styled("♪ No lyrics ♪", Style::default().fg(Color::DarkGray)))]
+                        vec![Line::from(Span::styled("", Style::default().fg(Color::DarkGray)))]
                     }
                 }
             }
@@ -90,18 +73,16 @@ impl<'a> Widget for LyricsWidget<'a> {
                 if let Some(LyricsLine::Plain { text, .. }) = next_line {
                     if !text.is_empty() {
                         vec![
-                            Line::from(vec![
-                                Span::styled("♪ ", Style::default().fg(Color::DarkGray)),
-                                Span::styled(text[0].clone(), Style::default().fg(Color::DarkGray)),
-                            ]),
+                            Line::from(Span::styled(text[0].clone(), Style::default().fg(Color::DarkGray))),
                         ]
                     } else {
-                        vec![Line::from(Span::styled("♪ No lyrics ♪", Style::default().fg(Color::DarkGray)))]
+                        vec![Line::from(Span::styled("", Style::default().fg(Color::DarkGray)))]
                     }
                 } else if let Some(LyricsLine::Timed { words, .. }) = next_line {
                     render_timed_line(words, Duration::ZERO, Color::DarkGray)
                 } else {
-                    vec![Line::from(Span::styled("♪ No lyrics ♪", Style::default().fg(Color::DarkGray)))]
+                    let placeholder = if self.has_lyrics { "" } else { "No lyrics" };
+                    vec![Line::from(Span::styled(placeholder, Style::default().fg(Color::DarkGray)))]
                 }
             }
         };
@@ -123,12 +104,7 @@ impl<'a> Widget for LyricsWidget<'a> {
 
 /// Render a timed (Enhanced LRC) lyrics line with word-by-word highlighting
 fn render_timed_line(words: &[crate::lyrics::LyricsWord], position: Duration, highlight_color: Color) -> Vec<Line<'static>> {
-    let mut spans = vec![
-        Span::styled(
-            "♪ ",
-            Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
-        ),
-    ];
+    let mut spans: Vec<Span> = Vec::new();
 
     for word in words {
         let style = if word.start <= position {
