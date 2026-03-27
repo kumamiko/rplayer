@@ -34,6 +34,9 @@ impl LyricsLine {
 pub fn parse_lrc(content: &str) -> BTreeMap<Duration, LyricsLine> {
     let mut lyrics: BTreeMap<Duration, LyricsLine> = BTreeMap::new();
 
+    // Strip UTF-8 BOM if present
+    let content = content.strip_prefix('\u{FEFF}').unwrap_or(content);
+
     for line in content.lines() {
         let line = line.trim();
         if line.is_empty() || !line.starts_with('[') {
@@ -413,6 +416,19 @@ mod tests {
                 assert_eq!(words[3].start, Duration::from_millis(16000));
             }
             _ => panic!("Expected Timed line"),
+        }
+    }
+
+    #[test]
+    fn test_parse_with_utf8_bom() {
+        let lrc_with_bom = "\u{FEFF}[00:32.65]遠く　波が揺らいで\n[00:40.41]近く　打ち寄せた音";
+        let lyrics = parse_lrc(lrc_with_bom);
+        assert_eq!(lyrics.len(), 2);
+        match lyrics.get(&Duration::from_millis(32650)) {
+            Some(LyricsLine::Plain { text, .. }) => {
+                assert_eq!(text, &vec!["遠く　波が揺らいで".to_string()]);
+            }
+            _ => panic!("Expected Plain line"),
         }
     }
 
