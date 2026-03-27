@@ -142,7 +142,18 @@ impl InputHandler {
             }
 
             // Playback
-            KeyCode::Enter => app.play_selected(audio_player, lyrics_manager),
+            KeyCode::Enter => {
+                let count = app.consume_count();
+                if count > 1 {
+                    let total = app.filtered_indices.len();
+                    if count > total {
+                        app.set_status(format!("超出范围 (共{}首)", total));
+                        return Ok(());
+                    }
+                    app.goto_line(count);
+                }
+                app.play_selected(audio_player, lyrics_manager);
+            }
             KeyCode::Char(' ') => app.toggle_pause(audio_player)?,
             KeyCode::Char('n') => app.next_song(audio_player, lyrics_manager),
             KeyCode::Char('p') => app.prev_song(audio_player, lyrics_manager),
