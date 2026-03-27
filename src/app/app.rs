@@ -107,6 +107,8 @@ pub struct SongsCache {
 enum ScanMessage {
     /// Progress update with number of files found
     Progress { found: usize },
+    /// Parsing progress update
+    Parsing { parsed: usize, total: usize },
     /// Scan completed with results
     Done {
         songs: Vec<Song>,
@@ -411,6 +413,15 @@ impl App {
                     self.status_expiry = None;
                     self.dirty = true;
                 }
+                ScanMessage::Parsing { parsed, total } => {
+                    if total > 0 {
+                        self.status_message = format!("正在解析元数据... {}/{}", parsed, total);
+                    } else {
+                        self.status_message = "扫描完成，无需更新".to_string();
+                    }
+                    self.status_expiry = None;
+                    self.dirty = true;
+                }
                 ScanMessage::Done { songs, cached_count, new_count, updated_count } => {
                     // Preserve currently playing song and selected song
                     let playing_path = self.current_song_index
@@ -476,6 +487,8 @@ impl App {
     /// Background scan thread function
     fn background_scan(music_dir: PathBuf, cache: Option<SongsCache>, tx: Sender<ScanMessage>) {
         use rayon::prelude::*;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
         use walkdir::WalkDir;
         
         let extensions = ["mp3", "flac", "wav", "ogg", "aac"];
@@ -523,16 +536,37 @@ impl App {
             }
         }
         
-        // Phase 3: Parse new files in parallel using rayon
+        let total_to_parse = to_parse_new.len() + to_parse_updated.len();
+        let parsed_count = Arc::new(AtomicUsize::new(0));
+        let tx_clone = tx.clone();
+        
+        // Helper to send progress periodically
+        let send_progress = |parsed: usize| {
+            if parsed % 10 == 0 || parsed == total_to_parse {
+                let _ = tx_clone.send(ScanMessage::Parsing { parsed, total: total_to_parse });
+            }
+        };
+        
+        // Phase 3: Parse new files in parallel using rayon with progress
         let parsed_new: HashMap<String, Song> = to_parse_new
             .par_iter()
-            .filter_map(|path| parse_song(path).ok().map(|song| (path.clone(), song)))
+            .filter_map(|path| {
+                let result = parse_song(path).ok().map(|song| (path.clone(), song));
+                let count = parsed_count.fetch_add(1, Ordering::Relaxed) + 1;
+                send_progress(count);
+                result
+            })
             .collect();
         
-        // Phase 3b: Parse updated files in parallel
+        // Phase 3b: Parse updated files in parallel with progress
         let parsed_updated: HashMap<String, Song> = to_parse_updated
             .par_iter()
-            .filter_map(|path| parse_song(path).ok().map(|song| (path.clone(), song)))
+            .filter_map(|path| {
+                let result = parse_song(path).ok().map(|song| (path.clone(), song));
+                let count = parsed_count.fetch_add(1, Ordering::Relaxed) + 1;
+                send_progress(count);
+                result
+            })
             .collect();
         
         let new_count = parsed_new.len();
