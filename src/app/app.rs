@@ -788,6 +788,14 @@ impl App {
         }
         count
     }
+
+    pub fn consume_count_optional(&mut self) -> Option<usize> {
+        let count = self.count.take();
+        if count.is_some() {
+            self.status_message.clear();
+        }
+        count
+    }
     
     pub fn move_down(&mut self) {
         if !self.filtered_indices.is_empty() && self.selected_index < self.filtered_indices.len() - 1 {

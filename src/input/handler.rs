@@ -143,8 +143,7 @@ impl InputHandler {
 
             // Playback
             KeyCode::Enter => {
-                let count = app.consume_count();
-                if count > 1 {
+                if let Some(count) = app.consume_count_optional() {
                     let total = app.filtered_indices.len();
                     if count > total {
                         app.set_status(format!("超出范围 (共{}首)", total));
