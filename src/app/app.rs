@@ -167,10 +167,8 @@ impl Default for App {
 impl App {
     pub fn new(music_dir: Option<String>) -> Result<Self> {
         let config = Config::load()?;
-        let sort_mode = config.sort_mode;
         let mut app = Self {
             config,
-            sort_mode,
             ..Self::default()
         };
         if let Some(dir) = music_dir {
@@ -504,6 +502,12 @@ impl App {
         use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
         use walkdir::WalkDir;
+
+        // Limit parallel I/O threads to reduce disk pressure (default: min(4, cpu_cores))
+        let thread_count = std::cmp::min(4, num_cpus::get());
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(thread_count)
+            .build_global();
         
         let extensions = ["mp3", "flac", "wav", "ogg", "aac"];
         
@@ -1076,9 +1080,6 @@ impl App {
 
     /// Save current playback position to config for restore on next launch
     fn save_playback_state(&mut self, audio_player: &AudioPlayer) {
-        // Always save sort mode
-        self.config.sort_mode = self.sort_mode;
-        
         if let Some(song_idx) = self.current_song_index {
             if let Some(song) = self.songs.get(song_idx) {
                 let pos = audio_player.current_position();
@@ -1176,12 +1177,8 @@ fn get_file_mtime(path: &std::path::Path) -> u64 {
         .unwrap_or(0)
 }
 
-/// Parse a song file's metadata using Symphonia
+/// Parse a song file's metadata (try lofty first, fallback to symphonia)
 fn parse_song(path: &str) -> Result<Song> {
-    use symphonia::core::meta::{MetadataOptions, StandardTagKey, Value};
-    use symphonia::core::probe::Hint;
-    use symphonia::default::get_probe;
-
     let file_path = std::path::Path::new(path);
     let mtime = get_file_mtime(file_path);
     let stem = file_path.file_stem()
@@ -1189,35 +1186,80 @@ fn parse_song(path: &str) -> Result<Song> {
         .unwrap_or("Unknown")
         .to_string();
 
-    let file = std::fs::File::open(file_path)?;
-    let mss = symphonia::core::io::MediaSourceStream::new(Box::new(file), Default::default());
+    // Try lofty first (faster, lighter)
+    match parse_song_lofty(path, &stem, mtime) {
+        Ok(song) => Ok(song),
+        Err(_) => parse_song_symphonia(path, &stem, mtime),
+    }
+}
+
+/// Parse song metadata using lofty (lightweight, only reads tags)
+fn parse_song_lofty(path: &str, stem: &str, mtime: u64) -> Result<Song> {
+    use lofty::probe::Probe;
+    use lofty::prelude::*;
+
+    let file_path = std::path::Path::new(path);
+
+    // Use lofty to read only metadata (much lighter than symphonia)
+    let tagged_file = Probe::open(file_path)?.read()?;
+
+    // Get duration from properties
+    let duration = tagged_file.properties().duration();
+
+    // Extract tags
+    let (title, artist, album) = if let Some(tag) = tagged_file.primary_tag() {
+        (
+            tag.title().map(|s| s.to_string()),
+            tag.artist().map(|s| s.to_string()),
+            tag.album().map(|s| s.to_string()),
+        )
+    } else {
+        (None, None, None)
+    };
+
+    Ok(Song {
+        path: path.to_string(),
+        title: title.unwrap_or_else(|| stem.to_string()),
+        artist: artist.unwrap_or_else(|| "未知歌手".to_string()),
+        album: album.unwrap_or_else(|| "未知专辑".to_string()),
+        duration,
+        mtime,
+    })
+}
+
+/// Parse song metadata using symphonia (fallback, more tolerant)
+fn parse_song_symphonia(path: &str, stem: &str, mtime: u64) -> Result<Song> {
+    use symphonia::core::meta::{MetadataOptions, StandardTagKey, Value};
+    use symphonia::core::probe::Hint;
+    use symphonia::default::get_probe;
 
     let mut hint = Hint::new();
-    if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+    if let Some(ext) = std::path::Path::new(path).extension().and_then(|e| e.to_str()) {
         hint.with_extension(ext);
     }
 
-    let mut probed = get_probe()
-        .format(&hint, mss, &Default::default(), &MetadataOptions::default())?;
-    let mut format_reader = probed.format;
+    let source = std::fs::File::open(path)?;
+    let mss = symphonia::core::io::MediaSourceStream::new(Box::new(source), Default::default());
 
-    // Get duration from track
-    let duration = format_reader.tracks().iter()
-        .find(|t| t.codec_params.codec != symphonia::core::codecs::CODEC_TYPE_NULL)
-        .and_then(|track| {
-            track.codec_params.time_base
-                .zip(track.codec_params.n_frames)
-                .map(|(tb, frames)| {
-                    let time = tb.calc_time(frames);
-                    std::time::Duration::from_secs_f64(time.seconds as f64 + f64::from(time.frac))
-                })
+    let probe = get_probe();
+    let mut probed = probe.format(&hint, mss, &Default::default(), &MetadataOptions::default())?;
+
+    // Get duration from default track
+    let duration = probed
+        .format
+        .default_track()
+        .and_then(|track| track.codec_params.time_base)
+        .and_then(|tb| {
+            probed.format.default_track().and_then(|t| t.codec_params.n_frames).map(|frames| {
+                std::time::Duration::from_secs_f64(frames as f64 * tb.numer as f64 / tb.denom as f64)
+            })
         })
-        .unwrap_or(std::time::Duration::ZERO);
+        .unwrap_or_default();
 
     // Collect tags from all metadata sources (upsert merge)
-    let mut title = None;
-    let mut artist = None;
-    let mut album = None;
+    let mut title: Option<String> = None;
+    let mut artist: Option<String> = None;
+    let mut album: Option<String> = None;
 
     // Helper to extract string value from tag
     let get_string = |tag: &symphonia::core::meta::Tag| -> Option<String> {
@@ -1244,7 +1286,7 @@ fn parse_song(path: &str) -> Result<Song> {
     }
 
     // 2. Read container metadata (e.g., Vorbis Comments in FLAC, iTunes metadata in M4A)
-    let mut container_meta = format_reader.metadata();
+    let mut container_meta = probed.format.metadata();
     while !container_meta.is_latest() {
         container_meta.pop();
     }
@@ -1263,7 +1305,7 @@ fn parse_song(path: &str) -> Result<Song> {
 
     Ok(Song {
         path: path.to_string(),
-        title: title.unwrap_or_else(|| stem),
+        title: title.unwrap_or_else(|| stem.to_string()),
         artist: artist.unwrap_or_else(|| "未知歌手".to_string()),
         album: album.unwrap_or_else(|| "未知专辑".to_string()),
         duration,

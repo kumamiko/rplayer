@@ -188,7 +188,8 @@ last_position_secs = 0
 | 组件 | 技术 |
 |------|------|
 | TUI 框架 | [ratatui](https://github.com/ratatui/ratatui) + [crossterm](https://github.com/crossterm-rs/crossterm) |
-| 音频解码与元数据解析 | [rodio](https://github.com/RustAudio/rodio) + [symphonia](https://github.com/pdeljanov/Symphonia) |
+| 音频解码 | [rodio](https://github.com/RustAudio/rodio) + [symphonia](https://github.com/pdeljanov/Symphonia) |
+| 元数据解析 | [lofty](https://github.com/Serial-ATA/lofty) + [symphonia](https://github.com/pdeljanov/Symphonia) |
 | 并行处理 | [rayon](https://github.com/rayon-rs/rayon) |
 | 命令行解析 | [clap](https://github.com/clap-rs/clap) |
 
