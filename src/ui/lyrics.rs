@@ -57,8 +57,7 @@ impl<'a> Widget for LyricsWidget<'a> {
                         if let Some(LyricsLine::Plain { text: next_text, .. }) = next_line {
                             if !next_text.is_empty() {
                                 result.push(Line::from(vec![
-                                    Span::styled("  ", Style::default()),
-                                    Span::styled(next_text[0].clone(), Style::default().fg(Color::DarkGray)),
+                                    Span::styled(next_text[0].clone(), Style::default().fg(Color::Rgb(120, 120, 120))),
                                 ]));
                             }
                         }
