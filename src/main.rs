@@ -9,6 +9,7 @@ use anyhow::Result;
 use app::App;
 use clap::Parser;
 use std::panic;
+use std::path::Path;
 
 /// A TUI local music player with lyrics display and Vim-style keybindings
 #[derive(Parser, Debug)]
@@ -37,6 +38,15 @@ fn main() -> Result<()> {
     }));
     
     let args = Args::parse();
+    
+    // 检查 -d 指定的目录是否存在
+    if let Some(ref dir) = args.music_dir {
+        if !Path::new(dir).exists() {
+            eprintln!("\x1b[31m目录不存在: {}\x1b[0m", dir);
+            std::process::exit(1);
+        }
+    }
+    
     let mut app = App::new(args.music_dir)?;
     app.run()?;
     Ok(())

@@ -101,6 +101,10 @@ impl Widget for HelpWidget {
                 Span::styled("  T            ", Style::default().fg(Color::Yellow)),
                 Span::raw("修改主题色"),
             ]),
+            Line::from(vec![
+                Span::styled("  S            ", Style::default().fg(Color::Yellow)),
+                Span::raw("切换音乐库"),
+            ]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("  q            ", Style::default().fg(Color::Yellow)),

@@ -14,6 +14,8 @@ pub enum Mode {
     Help,
     /// Theme color input mode: typing hex color
     Theme,
+    /// Switch cache: select different music folder cache
+    SwitchCache,
 }
 
 impl Mode {
@@ -24,6 +26,7 @@ impl Mode {
             Mode::ConfirmRefresh => "Confirm",
             Mode::Help => "Help",
             Mode::Theme => "Theme",
+            Mode::SwitchCache => "SwitchCache",
         }
     }
 }

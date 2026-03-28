@@ -18,6 +18,7 @@ impl InputHandler {
             Mode::ConfirmRefresh => self.handle_confirm_refresh(app, audio_player, lyrics_manager, key),
             Mode::Help => self.handle_help(app, key),
             Mode::Theme => self.handle_theme_color(app, key),
+            Mode::SwitchCache => self.handle_switch_cache(app, audio_player, lyrics_manager, key),
         }
     }
     
@@ -223,6 +224,16 @@ impl InputHandler {
                 app.mode = Mode::Help;
             }
             
+            // Switch cache
+            KeyCode::Char('S') => {
+                app.load_cached_folders();
+                if app.cached_folders.is_empty() {
+                    app.set_status("没有可用的缓存");
+                } else {
+                    app.mode = Mode::SwitchCache;
+                }
+            }
+            
             _ => {}
         }
 
@@ -401,6 +412,36 @@ impl InputHandler {
                     chars.insert(app.theme_color_cursor, c);
                     app.theme_color_input = chars.iter().collect();
                     app.theme_color_cursor += 1;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    
+    fn handle_switch_cache(&self, app: &mut App, audio_player: &mut AudioPlayer, lyrics_manager: &mut LyricsManager, key: KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Esc => {
+                app.mode = Mode::Normal;
+            }
+            KeyCode::Enter => {
+                if let Some(folder) = app.cached_folders.get(app.cached_folders_selected).cloned() {
+                    app.switch_to_cached_folder(&folder, audio_player, lyrics_manager);
+                }
+                app.mode = Mode::Normal;
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                if !app.cached_folders.is_empty() {
+                    app.cached_folders_selected = (app.cached_folders_selected + 1) % app.cached_folders.len();
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if !app.cached_folders.is_empty() {
+                    app.cached_folders_selected = if app.cached_folders_selected == 0 {
+                        app.cached_folders.len() - 1
+                    } else {
+                        app.cached_folders_selected - 1
+                    };
                 }
             }
             _ => {}

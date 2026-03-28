@@ -6,6 +6,7 @@ mod search;
 mod theme;
 mod message;
 mod help;
+mod switch_cache;
 pub mod utils;
 
 pub use playlist::*;
@@ -15,6 +16,7 @@ pub use search::*;
 pub use theme::*;
 pub use message::*;
 pub use help::*;
+pub use switch_cache::*;
 
 use crate::app::App;
 use crate::lyrics::LyricsManager;
@@ -70,6 +72,19 @@ impl<'a> Ui<'a> {
         if self.app.mode == crate::app::Mode::Help {
             let help = HelpWidget::new(theme_border, theme_title);
             f.render_widget(help, f.area());
+        }
+        
+        // Switch cache popup (when in switch cache mode)
+        if self.app.mode == crate::app::Mode::SwitchCache {
+            let current_folder = self.app.get_music_dir_str();
+            let switch_cache = SwitchCacheWidget::new(
+                &self.app.cached_folders,
+                self.app.cached_folders_selected,
+                &current_folder,
+                theme_border,
+                theme_title,
+            );
+            f.render_widget(switch_cache, f.area());
         }
     }
 }

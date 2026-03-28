@@ -58,6 +58,18 @@ pub struct App {
     
     // UI dirty flag: redraw only when true or playing
     dirty: bool,
+    
+    // Switch cache
+    pub cached_folders: Vec<CachedFolder>,
+    pub cached_folders_selected: usize,
+}
+
+/// Cached folder info for switching
+#[derive(Debug, Clone)]
+pub struct CachedFolder {
+    pub music_folder: String,
+    pub song_count: usize,
+    pub cache_path: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,6 +158,8 @@ impl Default for App {
             scanning: false,
             scan_rx: None,
             dirty: true,
+            cached_folders: Vec::new(),
+            cached_folders_selected: 0,
         }
     }
 }
@@ -160,7 +174,7 @@ impl App {
             ..Self::default()
         };
         if let Some(dir) = music_dir {
-            app.config.music_folder = dir;
+            app.config.music_folder = dir.replace('\\', "/").trim_end_matches('/').to_string();
             app.config.save()?;
         }
         // Load cache synchronously for instant display
@@ -374,7 +388,7 @@ impl App {
         Some(ratatui::style::Color::Rgb(rr, gg, bb))
     }
     
-    fn get_music_dir_str(&self) -> String {
+    pub fn get_music_dir_str(&self) -> String {
         self.get_music_dir().to_str().unwrap_or(".").to_string()
     }
     
@@ -607,8 +621,14 @@ impl App {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
+        // Normalize path: replace backslashes with forward slashes, remove trailing slash
+        let normalized = music_folder
+            .replace('\\', "/")
+            .trim_end_matches('/')
+            .to_string();
+
         let mut hasher = DefaultHasher::new();
-        music_folder.hash(&mut hasher);
+        normalized.hash(&mut hasher);
         let hash = hasher.finish();
 
         #[cfg(not(target_os = "windows"))]
@@ -635,6 +655,66 @@ impl App {
         cache_dir.join(format!("songs_cache_{:016x}.json", hash))
     }
     
+    /// Get the cache directory path
+    fn cache_dir() -> PathBuf {
+        #[cfg(not(target_os = "windows"))]
+        {
+            let dir = dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".rplayer")
+                .join("cache");
+            let _ = std::fs::create_dir_all(&dir);
+            dir
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let dir = std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("cache");
+            let _ = std::fs::create_dir_all(&dir);
+            dir
+        }
+    }
+    
+    /// Load list of all available cached folders
+    pub fn load_cached_folders(&mut self) {
+        self.cached_folders.clear();
+        let cache_dir = Self::cache_dir();
+        
+        if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map(|e| e == "json").unwrap_or(false) {
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        if let Ok(cache) = serde_json::from_str::<SongsCache>(&content) {
+                            self.cached_folders.push(CachedFolder {
+                                music_folder: cache.music_folder.clone(),
+                                song_count: cache.songs.len(),
+                                cache_path: path,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Sort by music folder name
+        self.cached_folders.sort_by(|a, b| a.music_folder.cmp(&b.music_folder));
+        
+        // Select current folder (normalize for comparison)
+        let current = self.get_music_dir_str().replace('\\', "/").trim_end_matches('/').to_string();
+        self.cached_folders_selected = self.cached_folders
+            .iter()
+            .position(|f| {
+                let f_normalized = f.music_folder.replace('\\', "/").trim_end_matches('/').to_string();
+                f_normalized == current
+            })
+            .unwrap_or(0);
+    }
+    
     /// Load cache from file
     fn load_cache(&self, music_folder: &str) -> Option<SongsCache> {
         let path = Self::cache_path(music_folder);
@@ -645,8 +725,11 @@ impl App {
         let content = std::fs::read_to_string(path).ok()?;
         let cache: SongsCache = serde_json::from_str(&content).ok()?;
         
-        // Validate cache is for the same music folder
-        if cache.music_folder == music_folder {
+        // Normalize both paths for comparison
+        let normalized_input = music_folder.replace('\\', "/").trim_end_matches('/').to_string();
+        let normalized_cache = cache.music_folder.replace('\\', "/").trim_end_matches('/').to_string();
+        
+        if normalized_cache == normalized_input {
             Some(cache)
         } else {
             None
@@ -655,8 +738,11 @@ impl App {
     
     /// Save cache to file
     fn save_cache(&self, music_folder: &str) -> Result<()> {
+        // Normalize path for consistent storage
+        let normalized = music_folder.replace('\\', "/").trim_end_matches('/').to_string();
+        
         let cache = SongsCache {
-            music_folder: music_folder.to_string(),
+            music_folder: normalized,
             songs: self.songs.clone(),
         };
         
@@ -1039,6 +1125,46 @@ impl App {
         self.current_pos = pos;
         self.scroll_to_playing();
         true
+    }
+    
+    /// Switch to a different cached music folder
+    pub fn switch_to_cached_folder(
+        &mut self,
+        folder: &CachedFolder,
+        audio_player: &mut AudioPlayer,
+        _lyrics_manager: &mut LyricsManager,
+    ) -> bool {
+        // Stop current playback
+        audio_player.stop();
+        self.is_playing = false;
+        self.current_song_index = None;
+        self.current_pos = Duration::ZERO;
+        
+        // Load the cache
+        if let Ok(content) = std::fs::read_to_string(&folder.cache_path) {
+            if let Ok(cache) = serde_json::from_str::<SongsCache>(&content) {
+                // Update config (ensure normalized path)
+                self.config.music_folder = folder.music_folder.replace('\\', "/").trim_end_matches('/').to_string();
+                let _ = self.config.save();
+                
+                // Update songs list
+                self.songs = cache.songs;
+                self.filtered_indices = (0..self.songs.len()).collect();
+                self.sort_songs();
+                
+                // Reset state
+                self.selected_index = 0;
+                self.scroll_offset = 0;
+                self.search_query.clear();
+                self.search_cursor = 0;
+                
+                self.set_status(format!("已切换到: {} ({} 首)", folder.music_folder, folder.song_count));
+                return true;
+            }
+        }
+        
+        self.set_status("加载缓存失败");
+        false
     }
 }
 
