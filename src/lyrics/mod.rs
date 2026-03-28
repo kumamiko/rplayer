@@ -135,4 +135,9 @@ impl LyricsManager {
 
         (current, next)
     }
+
+    pub fn clear(&mut self) {
+        self.lyrics.clear();
+        self.loaded_path = None;
+    }
 }

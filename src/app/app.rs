@@ -1132,14 +1132,21 @@ impl App {
         &mut self,
         folder: &CachedFolder,
         audio_player: &mut AudioPlayer,
-        _lyrics_manager: &mut LyricsManager,
+        lyrics_manager: &mut LyricsManager,
     ) -> bool {
         // Stop current playback
         audio_player.stop();
         self.is_playing = false;
         self.current_song_index = None;
         self.current_pos = Duration::ZERO;
-        
+        self.duration = Duration::ZERO;
+
+        // Clear lyrics
+        lyrics_manager.clear();
+
+        // Mark UI for refresh
+        self.dirty = true;
+
         // Load the cache
         if let Ok(content) = std::fs::read_to_string(&folder.cache_path) {
             if let Ok(cache) = serde_json::from_str::<SongsCache>(&content) {
