@@ -146,8 +146,6 @@ cargo build --release
 music_folder = "/path/to/music"
 # 主题色，6位十六进制（如 "56B6C2"），留空使用默认颜色
 themecolor = ""
-# 排序方式：Title（歌曲名）、Artist（歌手）、Album（专辑）、Folder（文件夹）
-sort_mode = "Title"
 # 以下字段由程序自动维护，无需手动编辑
 last_song_path = ""
 last_position_secs = 0

@@ -1046,21 +1046,20 @@ impl App {
         let selected_song = self.filtered_indices.get(self.selected_index).copied();
         if self.search_query.is_empty() {
             self.filtered_indices = (0..self.songs.len()).collect();
+            self.sort_songs();
+
+            // Try to restore selection to the same song
+            if let Some(song_idx) = selected_song {
+                if let Some(pos) = self.filtered_indices.iter().position(|&i| i == song_idx) {
+                    self.selected_index = pos;
+                    self.adjust_scroll();
+                } else {
+                    self.selected_index = 0;
+                    self.scroll_offset = 0;
+                }
+            }
         } else {
             self.apply_filter();
-            return; // apply_filter already resets selection and sorts
-        }
-        self.sort_songs();
-
-        // Try to restore selection to the same song
-        if let Some(song_idx) = selected_song {
-            if let Some(pos) = self.filtered_indices.iter().position(|&i| i == song_idx) {
-                self.selected_index = pos;
-                self.adjust_scroll();
-            } else {
-                self.selected_index = 0;
-                self.scroll_offset = 0;
-            }
         }
 
         self.set_status(format!("排序: {}", self.sort_mode.as_str()));

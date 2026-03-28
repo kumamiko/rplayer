@@ -133,12 +133,8 @@ impl InputHandler {
             KeyCode::Char('`') | KeyCode::Char('\'') => {
                 if app.current_song_index.is_none() {
                     app.set_status("没有正在播放的歌曲");
-                } else {
-                    let prev = app.selected_index;
-                    app.scroll_to_playing();
-                    if app.selected_index == prev && !app.filtered_indices.is_empty() {
-                        app.set_status("当前歌曲不在显示列表中");
-                    }
+                } else if !app.scroll_to_playing() {
+                    app.set_status("当前歌曲不在显示列表中");
                 }
             }
 
