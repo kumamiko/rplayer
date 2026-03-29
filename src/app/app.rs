@@ -1134,6 +1134,13 @@ impl App {
         audio_player: &mut AudioPlayer,
         lyrics_manager: &mut LyricsManager,
     ) -> bool {
+        // 如果是当前文件夹，不做任何操作
+        let current = self.get_music_dir_str().replace('\\', "/").trim_end_matches('/').to_string();
+        let target = folder.music_folder.trim_end_matches('/').to_string();
+        if current == target {
+            return false;
+        }
+
         // Stop current playback
         audio_player.stop();
         self.is_playing = false;
