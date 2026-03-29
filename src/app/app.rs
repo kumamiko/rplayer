@@ -590,17 +590,15 @@ impl App {
         let new_count = parsed_new.len();
         let updated_count = parsed_updated.len();
         
-        // Merge parsed results
-        let mut parsed_map: HashMap<String, Song> = parsed_new;
-        parsed_map.extend(parsed_updated);
-        
         // Phase 4: Build final song list preserving directory walk order
+        // Priority: parsed_updated (latest metadata+mtime) > parsed_new > cached_map
         let songs: Vec<Song> = file_entries
             .into_iter()
             .filter_map(|(path, _)| {
-                cached_map.get(&path)
+                parsed_updated.get(&path)
                     .cloned()
-                    .or_else(|| parsed_map.get(&path).cloned())
+                    .or_else(|| parsed_new.get(&path).cloned())
+                    .or_else(|| cached_map.get(&path).cloned())
             })
             .collect();
         
