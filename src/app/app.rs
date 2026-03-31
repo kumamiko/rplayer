@@ -845,24 +845,36 @@ impl App {
             return;
         }
         
-        // If current position > 3 seconds, restart current song
-        if self.current_pos > Duration::from_secs(3) {
-            if let Some(idx) = self.current_song_index {
-                if let Some(song) = self.songs.get(idx) {
-                    let _ = audio_player.play(&song.path);
-                    self.current_pos = Duration::ZERO;
-                    return;
-                }
-            }
-        }
-        
+        // Find current position in filtered list
         let current_filtered = self.current_song_index
             .and_then(|idx| self.filtered_indices.iter().position(|&i| i == idx));
         
-        let prev = if let Some(pos) = current_filtered {
-            if pos > 0 { pos - 1 } else { self.filtered_indices.len() - 1 }
-        } else {
-            0
+        let prev = match self.play_mode {
+            PlayMode::Single => {
+                // Repeat current song
+                if let Some(pos) = current_filtered {
+                    pos
+                } else {
+                    0
+                }
+            }
+            PlayMode::Shuffle => {
+                // Random previous song
+                use rand::Rng;
+                let mut rng = rand::rng();
+                rng.random_range(0..self.filtered_indices.len())
+            }
+            PlayMode::All | PlayMode::None => {
+                if let Some(pos) = current_filtered {
+                    if pos > 0 {
+                        pos - 1
+                    } else {
+                        self.filtered_indices.len() - 1
+                    }
+                } else {
+                    0
+                }
+            }
         };
         
         self.selected_index = prev;
